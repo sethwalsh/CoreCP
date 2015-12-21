@@ -27,16 +27,6 @@
 #include "CSampleCredential.h"
 #include "guid.h"
 
-/*
-WHAT ARE THESE FIELDS?!
-
-Also: #define SUCCEEDED(hr)   (((HRESULT)(hr)) >= 0)
-
-macros!
-G
-
-*/
-
 // CSampleProvider ////////////////////////////////////////////////////////
 
 CSampleProvider::CSampleProvider():
@@ -143,15 +133,8 @@ HRESULT CSampleProvider::SetUsageScenario(
 // pieces of this function.  For information on that, please see the credUI sample.
 STDMETHODIMP CSampleProvider::SetSerialization(
     const CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION* pcpcs
-	)
+    )
 {
-	/*
-	NOTE: 
-	 The second situation is in a remote logon case where the remote client may wish to
-	prepopulate a tile with a username, or in some cases, completely populate the tile and
-	 use it to logon without showing any UI.
-	 G
-	*/
     HRESULT hr = E_INVALIDARG;
 
     if ((CLSID_CSampleProvider == pcpcs->clsidCredentialProvider))

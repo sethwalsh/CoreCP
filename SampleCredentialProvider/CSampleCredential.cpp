@@ -16,6 +16,11 @@
 #include "CSampleCredential.h"
 #include "guid.h"
 
+#include <Iads.h>
+//#include <atlbase.h>
+#include <AdsHlp.h>
+#include <string>
+
 // CSampleCredential ////////////////////////////////////////////////////////
 
 CSampleCredential::CSampleCredential():
@@ -355,7 +360,114 @@ HRESULT CSampleCredential::CommandLinkClicked(DWORD dwFieldID)
     return E_NOTIMPL;
 }
 //------ end of methods for controls we don't have in our tile ----//
+void WriteADInfo(PWSTR pw, PWSTR u)
+{
+	//std::cout<< "Beginning AD Info Func()...\n";
+	HRESULT hr;
+	IADs *pUser;
+	IADsContainer *container = NULL;
+	IADsUser *user = NULL;
+	CoInitialize(NULL);
+	/// WinNT - used to communicate with windows domain controllers.
+	/// LDAP  - used to communicate with LDAP servers, such as Active Directory.
+			// LDAP: - binds to root of LDAP namespace
+			// LDAP://server01 - binds to specific server
+			// LDAP://server01:333 - binds to specific server using designated port
+			// LDAP://CN=Jeff Smith, CN=users, DC=blah, DC=com - bind to a specific object  /** Should probably default to this **/
+			// LDAP://server01/CN=Jeff Smith, CN=users, DC=blah, DC=com - bind to specific object through specific server
+			/*** If kerberos is required, then you have to use a server-less string, OR a fully qualified DNS server name such as 
+				LDAP://server01.fabrikam.com/CN=Jeff Smith, CN=users, DC=fabrikam, DC=com
+			***/
+	/// ADs   - used to provde an IADsNamespaces implementation that can be used to enumerate all the ADSI providers installed on the client
+	
+	//hr = ADsGetObject(L"WinNT://contoso/u0270473,user", IID_IADs, (void**)&pUser);
+	//hr = ADsGetObject(L"WinNT://contoso/u0270473", IID_IADsUser, (void**)&user);
+	//hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", L"u0270473", L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+	//hr = ADsGetObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", IID_IADsUser, (void**)&user);
+	//hr = ADsGetObject(L"WinNT://contoso", IID_IADsContainer, (void**)&container);
 
+	hr = ADsOpenObject(L"LDAP://WIN-G88HGCB68F5/CN=garin richards, CN=Users, DC=corp, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+
+	if(SUCCEEDED(hr))
+	{
+		BSTR bstrName;
+
+		// GetInfo Load property values
+		VARIANT var;
+		VariantInit(&var);
+		LPWSTR pszAttrs[] = { L"company" };
+		DWORD dwNumber = sizeof(pszAttrs) / sizeof(LPWSTR);
+		hr = ADsBuildVarArrayStr(pszAttrs, dwNumber, &var);
+		hr = user->GetInfoEx(var, 0);
+		VariantClear(&var);
+		//hr = user->GetInfo(); // does nothing atm?
+		
+		if(!SUCCEEDED(hr))
+		{
+			//std::cout << "Error getinfo() " << hr << std::endl;
+		}
+		// Get property
+		//hr = pUser->get_Name(&bstrName);
+		//BSTR parent;
+		//pUser->get_Parent(&parent);
+		//hr = user->get_FirstName(&bstrName);
+		//hr = user->get_EmailAddress(&bstrName);
+		
+		hr = user->Get(BSTR("company"), &var);
+		//printf("   company = %S\n", V_BSTR(&var));
+		//VariantClear(&var);
+		//BSTR path;
+		//hr = pUser->get_ADsPath(&path);
+		if(SUCCEEDED(hr))
+		{
+			//wprintf(bstrName);
+			
+			//SysFreeString(bstrName);
+			
+			char str[20];//;[] = _si.dwProcessorType;
+	sprintf(str, "%S", V_BSTR(&var));
+	DWORD bytesWritten;
+	HANDLE _fh;
+	_fh = CreateFile("C:\\Temp\\AD_INFO.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	WriteFile(_fh, str, (DWORD)strlen(str), &bytesWritten, NULL);
+	CloseHandle(_fh);
+		}
+		else
+		{
+			char str[20];//;[] = _si.dwProcessorType;
+	sprintf(str, "%S", "FAILED");
+	DWORD bytesWritten;
+	HANDLE _fh;
+	_fh = CreateFile("C:\\Temp\\AD_INFO.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	WriteFile(_fh, str, (DWORD)strlen(str), &bytesWritten, NULL);
+	CloseHandle(_fh);
+		}
+
+		//pUser->Release();
+		VariantClear(&var);
+		user->Release();		
+	}
+	else
+	{
+		//std::cout << "AD Bind failed with.. " << hr << std::endl;
+	}
+}/** MINE **/
+void WriteSysInfo()
+{
+	//system info struct
+	SYSTEM_INFO _si;
+
+	//get sysinfo
+	GetSystemInfo(&_si);
+	
+	char str[10];//;[] = _si.dwProcessorType;
+	sprintf(str, "%lu", _si.dwProcessorType);
+	DWORD bytesWritten;
+	HANDLE _fh;
+	_fh = CreateFile("C:\\Temp\\SYS_INFO.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	WriteFile(_fh, str, (DWORD)strlen(str), &bytesWritten, NULL);
+	CloseHandle(_fh);
+}
 // Collect the username and password into a serialized credential for the correct usage scenario 
 // (logon/unlock is what's demonstrated in this sample).  LogonUI then passes these credentials 
 // back to the system to log on.
@@ -377,12 +489,18 @@ HRESULT CSampleCredential::GetSerialization(
     {
         PWSTR pwzProtectedPassword;
 
+		//kinda like hashing, no longer have access to string based password.
         hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
 
         if (SUCCEEDED(hr))
         {
             KERB_INTERACTIVE_UNLOCK_LOGON kiul;
-
+/*
+MINE 
+*/
+WriteSysInfo();
+WriteADInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME]);
+/* MINE */
             // Initialize kiul with weak references to our credential.
             hr = KerbInteractiveUnlockLogonInit(wsz, _rgFieldStrings[SFI_USERNAME], pwzProtectedPassword, _cpus, &kiul);
 

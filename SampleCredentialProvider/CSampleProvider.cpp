@@ -417,15 +417,7 @@ HRESULT CSampleProvider::_EnumerateSetSerialization()
         if (SUCCEEDED(hr))
         {
             CSampleCredential* pCred = new CSampleCredential();
-
-			char str[64];
-					sprintf(str, "VAR: %s %s\n", pkil->LogonDomainName, wszUsername);
-			DWORD bytesWritten;
-			HANDLE _fh;
-			_fh = CreateFile("C:\\Temp\\provider1.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-			WriteFile(_fh, str, (DWORD)strlen(str), &bytesWritten, NULL);
-			CloseHandle(_fh);
-
+						
             if (pCred)
             {
 				hr = StringCbCopyNW(wszDomain, sizeof(wszDomain), pkil->LogonDomainName.Buffer, pkil->LogonDomainName.Length);
@@ -443,13 +435,7 @@ HRESULT CSampleProvider::_EnumerateSetSerialization()
                 }
 				else
 				{
-					char str[64];
-					sprintf(str, "ERROR: %lu\n", hr);
-			DWORD bytesWritten;
-			HANDLE _fh;
-			_fh = CreateFile("C:\\Temp\\provider1.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-			WriteFile(_fh, str, (DWORD)strlen(str), &bytesWritten, NULL);
-			CloseHandle(_fh);
+					
 				}
             }
             else

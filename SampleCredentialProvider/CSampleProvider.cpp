@@ -327,11 +327,11 @@ HRESULT CSampleProvider::_EnumerateOneCredential(
     CSampleCredential* ppc = new CSampleCredential();
     
     if (ppc)
-    {
+    {		
         // Set the Field State Pair and Field Descriptors for ppc's fields
         // to the defaults (s_rgCredProvFieldDescriptors, and s_rgFieldStatePairs) and the value of SFI_USERNAME
         // to pwzUsername.
-        hr = ppc->Initialize(_cpus, s_rgCredProvFieldDescriptors, s_rgFieldStatePairs, pwzUsername);
+        hr = ppc->Initialize(_cpus, s_rgCredProvFieldDescriptors, s_rgFieldStatePairs, pwzUsername, NULL); /* MINE -- added NULL domain **/
         
         if (SUCCEEDED(hr))
         {
@@ -404,6 +404,8 @@ HRESULT CSampleProvider::_EnumerateSetSerialization()
     WCHAR wszUsername[MAX_PATH] = {0};
     WCHAR wszPassword[MAX_PATH] = {0};
 
+	WCHAR wszDomain[MAX_PATH] = {0};
+
     // since this sample assumes local users, we'll ignore domain.  If you wanted to handle the domain
     // case, you'd have to update CSampleCredential::Initialize to take a domain.
     HRESULT hr = StringCbCopyNW(wszUsername, sizeof(wszUsername), pkil->UserName.Buffer, pkil->UserName.Length);
@@ -416,16 +418,39 @@ HRESULT CSampleProvider::_EnumerateSetSerialization()
         {
             CSampleCredential* pCred = new CSampleCredential();
 
+			char str[64];
+					sprintf(str, "VAR: %s %s\n", pkil->LogonDomainName, wszUsername);
+			DWORD bytesWritten;
+			HANDLE _fh;
+			_fh = CreateFile("C:\\Temp\\provider1.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+			WriteFile(_fh, str, (DWORD)strlen(str), &bytesWritten, NULL);
+			CloseHandle(_fh);
+
             if (pCred)
             {
-                hr = pCred->Initialize(_cpus, s_rgCredProvFieldDescriptors, s_rgFieldStatePairs, wszUsername, wszPassword);
-
-                if (SUCCEEDED(hr))
-                {
+				hr = StringCbCopyNW(wszDomain, sizeof(wszDomain), pkil->LogonDomainName.Buffer, pkil->LogonDomainName.Length);
+                //hr = pCred->Initialize(_cpus, s_rgCredProvFieldDescriptors, s_rgFieldStatePairs, wszUsername, wszPassword);
+				if (SUCCEEDED(hr))
+                {					
+					//hr = StringCbCopyNW(wszDomain, sizeof(wszDomain), pkil->LogonDomainName.Buffer, pkil->LogonDomainName.Length);
+					hr = pCred->Initialize(_cpus, s_rgCredProvFieldDescriptors, s_rgFieldStatePairs, wszUsername, wszDomain, wszPassword);
+					if(SUCCEEDED(hr))
+					{
                     _rgpCredentials[_dwNumCreds] = pCred;  //array takes ref
                     _dwSetSerializationCred = _dwNumCreds;
                     _dwNumCreds++;
+					}
                 }
+				else
+				{
+					char str[64];
+					sprintf(str, "ERROR: %lu\n", hr);
+			DWORD bytesWritten;
+			HANDLE _fh;
+			_fh = CreateFile("C:\\Temp\\provider1.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+			WriteFile(_fh, str, (DWORD)strlen(str), &bytesWritten, NULL);
+			CloseHandle(_fh);
+				}
             }
             else
             {

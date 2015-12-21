@@ -103,6 +103,7 @@ class CSampleCredential : public ICredentialProviderCredential
                        const CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR* rgcpfd,
                        const FIELD_STATE_PAIR* rgfsp,
                        PCWSTR pwzUsername,
+					   PCWSTR pwzDomain,
                        PCWSTR pwzPassword = NULL);
 
     CSampleCredential();

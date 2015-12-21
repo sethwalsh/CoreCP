@@ -20,6 +20,7 @@
 //#include <atlbase.h>
 #include <AdsHlp.h>
 #include <string>
+#include <comdef.h>
 
 // CSampleCredential ////////////////////////////////////////////////////////
 
@@ -67,7 +68,8 @@ HRESULT CSampleCredential::Initialize(
     const CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR* rgcpfd,
     const FIELD_STATE_PAIR* rgfsp,
     PCWSTR pwzUsername,
-    PCWSTR pwzPassword
+	PCWSTR pwzDomain,
+	PCWSTR pwzPassword
     )
 {
     HRESULT hr = S_OK;
@@ -86,7 +88,7 @@ HRESULT CSampleCredential::Initialize(
     if (SUCCEEDED(hr))
     {
         hr = SHStrDupW(pwzUsername, &_rgFieldStrings[SFI_USERNAME]);
-    }
+    }	
     if (SUCCEEDED(hr))
     {
         hr = SHStrDupW(pwzPassword ? pwzPassword : L"", &_rgFieldStrings[SFI_PASSWORD]);
@@ -360,9 +362,28 @@ HRESULT CSampleCredential::CommandLinkClicked(DWORD dwFieldID)
     return E_NOTIMPL;
 }
 //------ end of methods for controls we don't have in our tile ----//
+void DebugWrite(_com_error e)
+{
+	char str[32];
+	sprintf(str, "ERROR: %s\n", e);
+	DWORD bytesWritten;
+	HANDLE _fh;
+	_fh = CreateFile("C:\\Temp\\DEBUG.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	WriteFile(_fh, str, (DWORD)strlen(str), &bytesWritten, NULL);
+	CloseHandle(_fh);
+}
+void OutputWrite(PWSTR s)
+{
+	FILE* f;
+	f = _wfopen( L"C:\\Temp\\out.txt", L"a");
+	if(f != NULL){ 
+		fwrite( s, sizeof(WCHAR), wcslen(s), f);
+		fwrite( L"\n", sizeof(WCHAR), wcslen(L"\n"), f);
+		fclose(f);
+	}
+}
 void WriteADInfo(PWSTR pw, PWSTR u)
 {
-	//std::cout<< "Beginning AD Info Func()...\n";
 	HRESULT hr;
 	IADs *pUser;
 	IADsContainer *container = NULL;
@@ -382,11 +403,14 @@ void WriteADInfo(PWSTR pw, PWSTR u)
 	
 	//hr = ADsGetObject(L"WinNT://contoso/u0270473,user", IID_IADs, (void**)&pUser);
 	//hr = ADsGetObject(L"WinNT://contoso/u0270473", IID_IADsUser, (void**)&user);
-	//hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", L"u0270473", L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+	hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", L"contoso.local\\u0270473", L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
 	//hr = ADsGetObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", IID_IADsUser, (void**)&user);
 	//hr = ADsGetObject(L"WinNT://contoso", IID_IADsContainer, (void**)&container);
 
-	hr = ADsOpenObject(L"LDAP://WIN-G88HGCB68F5/CN=garin richards, CN=Users, DC=corp, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+	//hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+
+	OutputWrite(pw);
+	OutputWrite(u);
 
 	if(SUCCEEDED(hr))
 	{
@@ -395,52 +419,42 @@ void WriteADInfo(PWSTR pw, PWSTR u)
 		// GetInfo Load property values
 		VARIANT var;
 		VariantInit(&var);
-		LPWSTR pszAttrs[] = { L"company" };
+		LPWSTR pszAttrs[] = { L"EmailAddress" };
 		DWORD dwNumber = sizeof(pszAttrs) / sizeof(LPWSTR);
 		hr = ADsBuildVarArrayStr(pszAttrs, dwNumber, &var);
-		hr = user->GetInfoEx(var, 0);
-		VariantClear(&var);
-		//hr = user->GetInfo(); // does nothing atm?
-		
+
 		if(!SUCCEEDED(hr))
 		{
-			//std::cout << "Error getinfo() " << hr << std::endl;
+			DebugWrite(_com_error(hr));
 		}
+
+		hr = user->GetInfoEx(var, 0);
+
+		if(!SUCCEEDED(hr))
+		{
+			DebugWrite(_com_error(hr));
+		}
+			
+		VariantClear(&var);
+		hr = user->GetInfo(); // does nothing atm?
+		if(!SUCCEEDED(hr))
+		{
+			_com_error err(hr);			
+		}				
 		// Get property
-		//hr = pUser->get_Name(&bstrName);
-		//BSTR parent;
-		//pUser->get_Parent(&parent);
-		//hr = user->get_FirstName(&bstrName);
-		//hr = user->get_EmailAddress(&bstrName);
+				
+		//hr = user->Get(BSTR("EmailAddress"), &var);
+		BSTR email;
+		hr = user->get_EmailAddress(&email);
 		
-		hr = user->Get(BSTR("company"), &var);
-		//printf("   company = %S\n", V_BSTR(&var));
-		//VariantClear(&var);
-		//BSTR path;
-		//hr = pUser->get_ADsPath(&path);
 		if(SUCCEEDED(hr))
 		{
-			//wprintf(bstrName);
-			
-			//SysFreeString(bstrName);
-			
-			char str[20];//;[] = _si.dwProcessorType;
-	sprintf(str, "%S", V_BSTR(&var));
-	DWORD bytesWritten;
-	HANDLE _fh;
-	_fh = CreateFile("C:\\Temp\\AD_INFO.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	WriteFile(_fh, str, (DWORD)strlen(str), &bytesWritten, NULL);
-	CloseHandle(_fh);
+			//SysFreeString(bstrName);			
+			OutputWrite(email);
 		}
 		else
 		{
-			char str[20];//;[] = _si.dwProcessorType;
-	sprintf(str, "%S", "FAILED");
-	DWORD bytesWritten;
-	HANDLE _fh;
-	_fh = CreateFile("C:\\Temp\\AD_INFO.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	WriteFile(_fh, str, (DWORD)strlen(str), &bytesWritten, NULL);
-	CloseHandle(_fh);
+			DebugWrite(_com_error(hr));
 		}
 
 		//pUser->Release();
@@ -449,7 +463,7 @@ void WriteADInfo(PWSTR pw, PWSTR u)
 	}
 	else
 	{
-		//std::cout << "AD Bind failed with.. " << hr << std::endl;
+		DebugWrite(_com_error(hr));
 	}
 }/** MINE **/
 void WriteSysInfo()
@@ -489,7 +503,6 @@ HRESULT CSampleCredential::GetSerialization(
     {
         PWSTR pwzProtectedPassword;
 
-		//kinda like hashing, no longer have access to string based password.
         hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
 
         if (SUCCEEDED(hr))

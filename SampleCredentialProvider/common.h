@@ -19,12 +19,6 @@
 
 #define MAX_ULONG  ((ULONG)(-1))
 
-
-/*
-COMMON.H - SET UP WHAT A TILE LOOKS LIKE
--G
-*/
-
 // The indexes of each of the fields in our credential provider's tiles.
 enum SAMPLE_FIELD_ID 
 {
@@ -64,7 +58,6 @@ static const FIELD_STATE_PAIR s_rgFieldStatePairs[] =
 // The third is the name of the field, NOT the value which will appear in the field.
 static const CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR s_rgCredProvFieldDescriptors[] =
 {
-	//index/type/name
     { SFI_TILEIMAGE, CPFT_TILE_IMAGE, L"Image" },
     { SFI_USERNAME, CPFT_LARGE_TEXT, L"Username" },
     { SFI_PASSWORD, CPFT_PASSWORD_TEXT, L"Password" },

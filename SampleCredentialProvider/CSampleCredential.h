@@ -21,6 +21,7 @@
 #include "helpers.h"
 #include "dll.h"
 #include "resource.h"
+#include <Iads.h> //for user
 
 class CSampleCredential : public ICredentialProviderCredential
 {
@@ -97,6 +98,7 @@ class CSampleCredential : public ICredentialProviderCredential
                                 NTSTATUS ntsSubstatus,
                                 PWSTR* ppwszOptionalStatusText, 
                                 CREDENTIAL_PROVIDER_STATUS_ICON* pcpsiOptionalStatusIcon);
+
 
   public:
     HRESULT Initialize(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus,

@@ -386,7 +386,7 @@ void DebugWrite(_com_error e)
 void OutputWrite(PWSTR s)
 {
 	FILE* f;
-	f = _wfopen( L"C:\\Temp\\out.txt", L"a");
+	f = _wfopen( L"C:\\Temp\\G_out.txt", L"a");
 	if(f != NULL){ 
 		fwrite( s, sizeof(WCHAR), wcslen(s), f);
 		fwrite( L"\n", sizeof(WCHAR), wcslen(L"\n"), f);
@@ -447,8 +447,9 @@ void WriteADInfo(PWSTR pw, PWSTR u)
 		}
 
 		VariantClear(&var);
-		//TODO: WHY?
-		hr = user->GetInfo(); // does nothing atm?
+
+		//hr = user->GetInfo(); // does nothing atm?
+
 		if(!SUCCEEDED(hr))
 		{
 			_com_error err(hr);			
@@ -504,40 +505,70 @@ MINE - Used for calculating fields in user object, not sure what is needed yet.
 Probably very similar to around line 430.
 //////////////////////////////////////////////////////////////////////////
 */
-void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner)
+void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 {
-	
+
 	HRESULT hr;
 	IADs *pUser;
 	IADsContainer *container = NULL;
 	IADsUser *user = NULL;
 	CoInitialize(NULL);
 
-	//TODO: Must handle authentication of user correctly, maybe we can just pass user object everywhere instead of authing again 
-	hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", L"contoso.local\\u0270473", L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+	DWORD comp = 1;
+	DWORD comp2 = 2;
+	DWORD tot = 2;
+
+	//create progress box
+	//Start Progress Dialog and give it a title
+	ppd->StartProgressDialog(hwndOwner,NULL,PROGDLG_MODAL,NULL);
+	ppd->SetTitle(L"This Is A Progress Box");
+
+	//set progress to 50 %
+	ppd->SetProgress(comp,tot);
+
+	//sleep for two seconds to simulate "work"
+	Sleep(2000);		
+
+	//check if cancel
+	if(ppd->HasUserCancelled())
+	{
+		//if so close dialog box
+		ppd->StopProgressDialog();
+	}
 
 
-	//In fact, I have all the info about the user in the HRESULT "userinfo" above, could 
-	//probably just enumerate over that to make code look nicer versus in that massive
-	//function
+	//ldap call
+	hr = ADsOpenObject(L"LDAP://WIN-G88HGCB68F5/CN=garin richards, CN=Users, DC=corp, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
 
-	//total number of credentials about the user found (email, address, number, etc..)
-	int credsTotal;
+	//if ldap call successful
+	if(SUCCEEDED(hr))
+	{
 
-	//Actual number of credentials found in the user object
-	int credsFound;
+		BSTR bstrName;
 
-	/*
-	sizeof(user) / sizeof(user[0]) would work if it was an array, but if I remember correctly it was a little
-	weird with datatypes. Must double check.
+		// GetInfo Load property values
+		VARIANT var;
+		VariantInit(&var);
+		LPWSTR pszAttrs[] = { L"EmailAddress" };
+		DWORD dwNumber = sizeof(pszAttrs) / sizeof(LPWSTR);
+		hr = ADsBuildVarArrayStr(pszAttrs, dwNumber, &var);
 
-	Look through the structs and get the non zero ones, this number is the "percentage fetched" of data from the 
-	user object
-	*/
+		//get email 
+		BSTR email;
+		hr = user->get_EmailAddress(&email);
+
+		//TODO: Does this authenticate out correctly and write out to file?
+		//write email to file in C:\Temp\G_out.txt 
+		OutputWrite(email);
 
 
+	}
 
-
+	//set to 100% done
+	ppd->SetProgress(comp2,tot);
+	
+	 //close
+	ppd->StopProgressDialog();
 }
 
 
@@ -585,27 +616,15 @@ HRESULT CSampleCredential::GetSerialization(
 				_pCredProvCredentialEvents->OnCreatingWindow(&hwndOwner);
 			}
 
-			//calls function to get data about the user
-			//EnumerateUserInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME], hwndOwner);
-
-
-			/*
-			Proof of concept, the progress dialog box opens and closes on its own five seconds later.
-			*/
-
 			//initialize Progress Dialog
 			IProgressDialog * ppd;
 			CoCreateInstance(CLSID_ProgressDialog, NULL, CLSCTX_INPROC_SERVER, 
 				IID_IProgressDialog, (void **)&ppd);
-			
-			//Start Progress Dialog
-			ppd->StartProgressDialog(hwndOwner,NULL,PROGDLG_MODAL,NULL);
 
-			//wait for 5 seconds
-			Sleep(5000);
+			//calls function to get data about the user
+			EnumerateUserInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME],hwndOwner,ppd);
 
-			//close progress dialog
-			ppd->StopProgressDialog();
+
 			hr = S_OK;
 
 			/*
@@ -615,23 +634,24 @@ HRESULT CSampleCredential::GetSerialization(
 			*/
 			// Initialize kiul with weak references to our credential.
 			hr = KerbInteractiveUnlockLogonInit(wsz, _rgFieldStrings[SFI_USERNAME], pwzProtectedPassword, _cpus, &kiul);
-
+			DebugWrite(_com_error(hr));
 			if (SUCCEEDED(hr))
 			{
 				// We use KERB_INTERACTIVE_UNLOCK_LOGON in both unlock and logon scenarios.  It contains a
 				// KERB_INTERACTIVE_LOGON to hold the creds plus a LUID that is filled in for us by Winlogon
 				// as necessary.
 				hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);
-
+				DebugWrite(_com_error(hr));
 				if (SUCCEEDED(hr))
 				{
 					ULONG ulAuthPackage;
 					hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);
+					DebugWrite(_com_error(hr));
 					if (SUCCEEDED(hr))
 					{
 						pcpcs->ulAuthenticationPackage = ulAuthPackage;
 						pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
-						
+
 
 						// At this point the credential has created the serialized credential used for logon
 						// By setting this to CPGSR_RETURN_CREDENTIAL_FINISHED we are letting logonUI know

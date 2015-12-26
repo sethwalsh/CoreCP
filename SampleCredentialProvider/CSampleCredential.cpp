@@ -26,6 +26,10 @@
 //for user
 #include <Iads.h>
 
+//for domain
+#include <DSRole.h>
+#pragma comment(lib, "netapi32.lib")
+
 //for dialogbox
 #include <WinUser.h>
 #include <Windows.h>
@@ -48,6 +52,7 @@ _cRef(1),
 
 CSampleCredential::~CSampleCredential()
 {
+	/// ------------ TODO: May need to clear out the username field 
 	if (_rgFieldStrings[SFI_PASSWORD])
 	{
 		// CoTaskMemFree (below) deals with NULL, but StringCchLength does not.
@@ -98,7 +103,8 @@ HRESULT CSampleCredential::Initialize(
 	// Initialize the String values of all the fields.
 	if (SUCCEEDED(hr))
 	{
-		hr = SHStrDupW(pwzUsername, &_rgFieldStrings[SFI_USERNAME]);
+		//hr = SHStrDupW(pwzUsername, &_rgFieldStrings[SFI_USERNAME]);
+		hr = SHStrDupW(L"", &_rgFieldStrings[SFI_USERNAME]);
 	}	
 	if (SUCCEEDED(hr))
 	{
@@ -393,6 +399,24 @@ void OutputWrite(PWSTR s)
 		fclose(f);
 	}
 }
+LPWSTR GetDomain()
+{
+	DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
+	DWORD dw;
+	dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
+	if(dw != ERROR_SUCCESS)
+	{
+		//wprintf(L"DsRoleGetPrimaryDomainInformation: %u\n", dw);
+		return L"";
+	}
+	if(info->DomainNameDns == NULL)
+	{
+		//wprintf(L"DomainNameDns is NULL\n");
+		return L"";
+	}
+	else
+		return info->DomainNameDns;
+}
 void WriteADInfo(PWSTR pw, PWSTR u)
 {
 	HRESULT hr;
@@ -414,7 +438,19 @@ void WriteADInfo(PWSTR pw, PWSTR u)
 
 	//hr = ADsGetObject(L"WinNT://contoso/u0270473,user", IID_IADs, (void**)&pUser);
 	//hr = ADsGetObject(L"WinNT://contoso/u0270473", IID_IADsUser, (void**)&user);
-	hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", L"contoso.local\\u0270473", L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+	LPWSTR pszDomain = GetDomain();	
+	if(pszDomain != NULL)
+	{
+		//LPWSTR usr = L"\\u0270473";
+		//std::wstring ws = pszDomain;
+		//ws += usr;
+		//LPCWSTR concat = ws.c_str();//pszDomain + usr;
+		hr = ADsOpenObject(L"LDAP://CN=seth walsh, CN=Users, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+		//hr = ADsOpenObject(L"LDAP://CN=seth walsh, CN=Users, DC=contoso, DC=local", concat, L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+	}
+	else
+		hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", L"contoso.local\\u0270473", L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+	//hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", L"contoso.local\\u0270473", L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
 	//hr = ADsGetObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", IID_IADsUser, (void**)&user);
 	//hr = ADsGetObject(L"WinNT://contoso", IID_IADsContainer, (void**)&container);
 
@@ -422,7 +458,7 @@ void WriteADInfo(PWSTR pw, PWSTR u)
 
 	OutputWrite(pw);
 	OutputWrite(u);
-
+	
 	if(SUCCEEDED(hr))
 	{
 		BSTR bstrName;
@@ -589,51 +625,51 @@ HRESULT CSampleCredential::GetSerialization(
 
 	WCHAR wsz[MAX_COMPUTERNAME_LENGTH+1];
 	DWORD cch = ARRAYSIZE(wsz);
-	if (GetComputerNameW(wsz, &cch))
+	//PDOMAIN_CONTROLLER_INFO *pdcInfo;
+	//DsGetDcName(NULL, NULL, NULL, NULL, 0, &pdcInfo);
+			WCHAR wszDomain[MAX_PATH] = {0};	
+			DWORD bufSize = MAX_PATH;
+	if(GetComputerNameExW(ComputerNameDnsDomain, wszDomain, &bufSize))
 	{
+		DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
+		DWORD dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
+		
+		// Use the flat NETBIOS name which is either DOMAIN or WORKGROUP
+		PWSTR splitDomain;
+		if(info->DomainNameFlat != NULL)
+		{
+			splitDomain = info->DomainNameFlat;
+		}
+		
+		// Split user and keep the actual username and not the domain name
+		PWSTR splitUser = NULL, _p = NULL;		
+		// By convention USERNAME can come in the following formats:
+		//	USERNAME
+		//	USERNAME@DOMAIN
+		//	DOMAIN\USERNAME
+		_p = wcsrchr(_rgFieldStrings[SFI_USERNAME], L'\\');
+		if(_p != NULL)
+			splitUser = _p + 1;			
+		_p = wcsrchr(_rgFieldStrings[SFI_USERNAME], L'@');
+		if(_p != NULL)
+			splitUser = _rgFieldStrings[SFI_USERNAME];
+		if(splitUser = NULL)
+			splitUser = _rgFieldStrings[SFI_USERNAME];
+				
+		OutputWrite(splitDomain);
+		OutputWrite(splitUser);
+
 		PWSTR pwzProtectedPassword;
 
 		hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
 
 		if (SUCCEEDED(hr))
 		{
-			KERB_INTERACTIVE_UNLOCK_LOGON kiul;
+			KERB_INTERACTIVE_UNLOCK_LOGON kiul;						
+			// Initialize kiul with weak references to our credential.			
 
-			/*
-			//////////////////////////////////////////////////////////////////////////
-			MINE
-			//////////////////////////////////////////////////////////////////////////
-			*/
-
-			WriteSysInfo();
-			WriteADInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME]);
-
-			//get handle
-			HWND hwndOwner = NULL;
-
-			if (_pCredProvCredentialEvents)
-			{
-				_pCredProvCredentialEvents->OnCreatingWindow(&hwndOwner);
-			}
-
-			//initialize Progress Dialog
-			IProgressDialog * ppd;
-			CoCreateInstance(CLSID_ProgressDialog, NULL, CLSCTX_INPROC_SERVER, 
-				IID_IProgressDialog, (void **)&ppd);
-
-			//calls function to get data about the user
-			EnumerateUserInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME],hwndOwner,ppd);
-
-
-			hr = S_OK;
-
-			/*
-			//////////////////////////////////////////////////////////////////////////
-			END MINE
-			//////////////////////////////////////////////////////////////////////////
-			*/
-			// Initialize kiul with weak references to our credential.
-			hr = KerbInteractiveUnlockLogonInit(wsz, _rgFieldStrings[SFI_USERNAME], pwzProtectedPassword, _cpus, &kiul);
+			//hr = KerbInteractiveUnlockLogonInit(L"contoso", _rgFieldStrings[SFI_USERNAME], pwzProtectedPassword, _cpus, &kiul);
+			hr = KerbInteractiveUnlockLogonInit(splitDomain, splitUser, pwzProtectedPassword, _cpus, &kiul);
 			DebugWrite(_com_error(hr));
 			if (SUCCEEDED(hr))
 			{
@@ -651,8 +687,87 @@ HRESULT CSampleCredential::GetSerialization(
 					{
 						pcpcs->ulAuthenticationPackage = ulAuthPackage;
 						pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
+												
+						// At this point the credential has created the serialized credential used for logon
+						// By setting this to CPGSR_RETURN_CREDENTIAL_FINISHED we are letting logonUI know
+						// that we have all the information we need and it should attempt to submit the 
+						// serialized credential.
+						*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;
+					}
+				}
+			}
 
+			CoTaskMemFree(pwzProtectedPassword);
+		}
+		return hr;
+	}
+	if (GetComputerNameW(wsz, &cch))
+	{
+		OutputWrite(wsz);
+		PWSTR pwzProtectedPassword;
 
+		hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
+
+		if (SUCCEEDED(hr))
+		{
+			KERB_INTERACTIVE_UNLOCK_LOGON kiul;
+
+			/*
+			//////////////////////////////////////////////////////////////////////////
+			MINE
+			//////////////////////////////////////////////////////////////////////////
+			*/
+			/*
+			WriteSysInfo();
+			WriteADInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME]);
+
+			//get handle
+			HWND hwndOwner = NULL;
+
+			if (_pCredProvCredentialEvents)
+			{
+				_pCredProvCredentialEvents->OnCreatingWindow(&hwndOwner);
+			}
+
+			//initialize Progress Dialog
+			IProgressDialog * ppd;
+			CoCreateInstance(CLSID_ProgressDialog, NULL, CLSCTX_INPROC_SERVER, 
+				IID_IProgressDialog, (void **)&ppd);
+
+			//calls function to get data about the user
+			//EnumerateUserInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME],hwndOwner,ppd);
+
+			*/
+			hr = S_OK;
+
+			/*
+			//////////////////////////////////////////////////////////////////////////
+			END MINE
+			//////////////////////////////////////////////////////////////////////////
+			*/
+			// Initialize kiul with weak references to our credential.
+			
+
+			hr = KerbInteractiveUnlockLogonInit(wsz, _rgFieldStrings[SFI_USERNAME], pwzProtectedPassword, _cpus, &kiul);
+			//hr = KerbInteractiveUnlockLogonInit(wszDomain, _rgFieldStrings[SFI_USERNAME], pwzProtectedPassword, _cpus, &kiul);
+			DebugWrite(_com_error(hr));
+			if (SUCCEEDED(hr))
+			{
+				// We use KERB_INTERACTIVE_UNLOCK_LOGON in both unlock and logon scenarios.  It contains a
+				// KERB_INTERACTIVE_LOGON to hold the creds plus a LUID that is filled in for us by Winlogon
+				// as necessary.
+				hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);
+				DebugWrite(_com_error(hr));
+				if (SUCCEEDED(hr))
+				{
+					ULONG ulAuthPackage;
+					hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);
+					DebugWrite(_com_error(hr));
+					if (SUCCEEDED(hr))
+					{
+						pcpcs->ulAuthenticationPackage = ulAuthPackage;
+						pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
+												
 						// At this point the credential has created the serialized credential used for logon
 						// By setting this to CPGSR_RETURN_CREDENTIAL_FINISHED we are letting logonUI know
 						// that we have all the information we need and it should attempt to submit the 
@@ -665,6 +780,7 @@ HRESULT CSampleCredential::GetSerialization(
 			CoTaskMemFree(pwzProtectedPassword);
 		}
 	}
+	//} // mine
 	else
 	{
 		DWORD dwErr = GetLastError();

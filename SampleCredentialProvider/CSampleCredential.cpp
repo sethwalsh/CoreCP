@@ -80,10 +80,10 @@ LPWSTR GetDomain()
 	{
 		//wprintf(L"DomainNameDns is NULL\n");
 		//::MessageBoxA(NULL, "DomainNameDns is NULL", "DsRoleGetPrimaryDomainInformation", NULL);
-		return L"";
+		return info->DomainNameFlat;
 	}
 	else
-		return info->DomainNameDns;
+		return info->DomainNameFlat;
 }
 // CSampleCredential ////////////////////////////////////////////////////////
 
@@ -165,7 +165,11 @@ HRESULT CSampleCredential::Initialize(
 	if (SUCCEEDED(hr))
     {
         //hr = SHStrDupW(GetDomain(), &_rgFieldStrings[SFI_DOMAIN]);
-		hr = SHStrDupW(L"Log on to:", &_rgFieldStrings[SFI_DOMAIN]);
+		wchar_t buf[80];
+		wcscpy(buf, L"Log on to: ");
+		wcscat(buf, GetDomain());
+		OutputWrite(buf);
+		hr = SHStrDupW(buf, &_rgFieldStrings[SFI_DOMAIN]);
     }
 
 	return S_OK;
@@ -357,7 +361,7 @@ HRESULT CSampleCredential::SetStringValue(
 		- For example if the user types .\ Then we know that the user requested a logon to the localhost and would set the Text to display the COMPUTERNAME
 		- If they type DOMAIN\ then set the Text to be DOMAIN
 		***/
-		/*
+		
 		if(dwFieldID == SFI_USERNAME)
 		{
 			PWSTR _p = wcsrchr(_rgFieldStrings[SFI_USERNAME], L'\\');
@@ -370,7 +374,7 @@ HRESULT CSampleCredential::SetStringValue(
 				//hr = SHStrDupW(_temp, &_rgFieldStrings[SFI_DOMAIN]);				
 			}
 		}
-		*/
+		
 		// Original code
 		PWSTR* ppwszStored = &_rgFieldStrings[dwFieldID];
 		CoTaskMemFree(*ppwszStored);
@@ -839,6 +843,10 @@ HRESULT CSampleCredential::GetSerialization(
 			hr = HRESULT_FROM_WIN32(dwErr);
 		}
 	}
+	// Free up the memory from domain query
+	DsRoleFreeMemory(info);
+
+	// return result
 	return hr;
 }
 struct REPORT_RESULT_STATUS_INFO

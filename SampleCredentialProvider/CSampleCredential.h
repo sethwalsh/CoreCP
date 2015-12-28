@@ -113,6 +113,7 @@ class CSampleCredential : public ICredentialProviderCredential
     virtual ~CSampleCredential();
 
   private:
+	  PWSTR _pDomainName; // Holds the current domain name, if not domain joined then localhost is the name
     LONG                                  _cRef;
 
     CREDENTIAL_PROVIDER_USAGE_SCENARIO    _cpus; // The usage scenario for which we were enumerated.

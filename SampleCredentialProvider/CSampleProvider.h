@@ -18,7 +18,7 @@
 #define MAX_CREDENTIALS 3
 #define MAX_DWORD   0xffffffff        // maximum DWORD
 
-class CSampleProvider : public ICredentialProvider
+class CSampleProvider : public ICredentialProvider, ICredentialProviderFilter // added Filter
 {
   public:
     // IUnknown
@@ -39,6 +39,10 @@ class CSampleProvider : public ICredentialProvider
 
     STDMETHOD (QueryInterface)(REFIID riid, void** ppv)
     {
+		/**************
+		Testing new IProviderFilter stuff
+		***************/
+		/*
         HRESULT hr;
         if (IID_IUnknown == riid || 
             IID_ICredentialProvider == riid)
@@ -53,9 +57,62 @@ class CSampleProvider : public ICredentialProvider
             hr = E_NOINTERFACE;
         }
         return hr;
+		*/
+		HRESULT hr;
+    if (IID_IUnknown == riid)
+        {
+        *ppv = this;
+        AddRef();
+        hr = S_OK;
+        }
+        else if (IID_ICredentialProvider == riid)
+        {
+        *ppv = static_cast<ICredentialProvider*>(this);
+        AddRef();
+        hr = S_OK;
+        }
+        else if (IID_ICredentialProviderFilter == riid)
+    {
+        *ppv = static_cast<ICredentialProviderFilter*>(this);
+        AddRef();
+        hr = S_OK;
     }
-
+    else
+    {
+        *ppv = NULL;
+        hr = E_NOINTERFACE;
+    }
+    return hr;
+    }
   public:
+	  //ICredentialProviderFilter
+          /**
+        * \brief method to filter CPProvider
+        * \param cpus - CP usage scenario
+        * \param dwFlags
+        * \param rgclsidProviders
+        * \param rgbAllow
+        * \param cProviders
+        * \return IFACEMETHODIMP
+        */
+        IFACEMETHODIMP Filter( 
+            CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus,
+            DWORD dwFlags,
+            GUID *rgclsidProviders,
+            BOOL *rgbAllow,
+            DWORD cProviders);
+
+        /**
+        * \brief method to update remote logon credential
+        * \param pcpcsIn - serialized logon credential
+        * \param pcpcsOut - returned logon credential
+        * \return IFACEMETHODIMP
+        */
+        IFACEMETHODIMP UpdateRemoteCredential( 
+            const CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION *pcpcsIn,
+            CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION *pcpcsOut);
+		/** END FILTER ADDITIONS 
+		**/
     IFACEMETHODIMP SetUsageScenario(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus, DWORD dwFlags);
     IFACEMETHODIMP SetSerialization(const CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION* pcpcs);
 

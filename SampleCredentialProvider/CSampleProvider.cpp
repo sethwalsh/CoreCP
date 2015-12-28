@@ -79,7 +79,55 @@ void CSampleProvider::_CleanupSetSerialization()
     }
 }
 
+/** Adding Filter stuff
+**/
+HRESULT CSampleProvider::Filter(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus,DWORD dwFlags,GUID* rgclsidProviders,BOOL* rgbAllow,DWORD cProviders)
+{
+    //UNUSED(dwFlags);
+    UNREFERENCED_PARAMETER(dwFlags);
+    //MessageBox(NULL, "Filter!", "Trace", NULL);
+    switch (cpus)
+    {
+        case CPUS_LOGON:
+			//Filters out the default Windows provider (only for Logon and Unlock scenarios)
+            for (int i = 0; i < (int)cProviders; i++)
+            {
+                if (IsEqualGUID(rgclsidProviders[i], CLSID_CSampleProvider))
+					rgbAllow[i]=true;
+                else 
+					rgbAllow[i] = false;
+				//;
+                //rgbAllow[i]=true;
+            }
+        return S_OK;
+        case CPUS_UNLOCK_WORKSTATION:
+            //Filters out the default Windows provider (only for Logon and Unlock scenarios)
+            for (int i = 0; i < (int)cProviders; i++)
+            {
+                if (IsEqualGUID(rgclsidProviders[i], CLSID_PasswordCredentialProvider))
+					rgbAllow[i]=true;
+                else 
+					rgbAllow[i] = false;
+				//;
+                //rgbAllow[i]=true;
+            }
+        return S_OK;
+        case CPUS_CREDUI:
+        case CPUS_CHANGE_PASSWORD:
+        return E_NOTIMPL;
+        default:
+        return E_INVALIDARG;
+    }
+}
 
+HRESULT CSampleProvider::UpdateRemoteCredential(const CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION* pcpcsIn, CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION* pcpcsOut)
+{
+    UNREFERENCED_PARAMETER(pcpcsOut);
+    UNREFERENCED_PARAMETER(pcpcsIn);
+    return E_NOTIMPL;
+}
+/** End of Filter additions
+**/
 
 // SetUsageScenario is the provider's cue that it's going to be asked for tiles
 // in a subsequent call.  

@@ -40,6 +40,9 @@
 //for http
 #include <winhttp.h>
 
+//mac addr fetching
+#include <Iphlpapi.h>
+
 void DebugWrite(_com_error e)
 {	
 	FILE* f;
@@ -639,11 +642,80 @@ void WriteSysInfo()
 	CloseHandle(_fh);
 }
 
+/*
+Gets Processor ID
+*/
+char* GetProcessor() {
+
+	char procInfo[10];
+
+	//sys info struct
+	SYSTEM_INFO _si;
+
+	//get sysinfo
+	GetSystemInfo(&_si);
+
+	//get processor type
+	sprintf(procInfo,  "%lu", _si.dwProcessorType);
+
+	return procInfo;
+
+}
+
+/*
+Gets MAC Address
+//TODO: http://stackoverflow.com/questions/13646621/how-to-get-mac-address-in-windows-with-c
+*/
+char* GetMacAddress()
+{
+	PIP_ADAPTER_INFO AdapterInfo;
+	DWORD dwBufLen = sizeof(AdapterInfo);
+	char* mac_addr = (char *)malloc(17);
+
+	//allocating memory for getadapterinfo
+	AdapterInfo = (IP_ADAPTER_INFO *) malloc(sizeof(IP_ADAPTER_INFO));
+	
+	if(AdapterInfo == NULL){
+		//TODO: error allocating memory, handle gracefully
+	}
+
+	//call to getadapterinfo to get size for dwbuflen
+	if(GetAdaptersInfo(AdapterInfo,&dwBufLen) == ERROR_BUFFER_OVERFLOW){
+
+		AdapterInfo = (IP_ADAPTER_INFO *) malloc(dwBufLen);
+
+		if(AdapterInfo == NULL){
+			//TODO: Error allocating memory for getadapters info, like above. handle gracefully.
+		}
+
+	}
+
+	//get the mac addr
+	if(GetAdaptersInfo(AdapterInfo,&dwBufLen) == NO_ERROR) {
+
+			PIP_ADAPTER_INFO pAdapterInfo = AdapterInfo; //Pointer to adapter info
+
+		do{
+			//copy over mac addr
+			sprintf(mac_addr, "%02X:%02X:%02X:%02X:%02X:%02X",
+			pAdapterInfo->Address[0], pAdapterInfo->Address[1],
+			pAdapterInfo->Address[2], pAdapterInfo->Address[3],
+			pAdapterInfo->Address[4], pAdapterInfo->Address[5]);
+
+		} while(pAdapterInfo);
+
+	}
+
+	free(AdapterInfo);
+	return mac_addr;
+
+}
 
 /*
 //////////////////////////////////////////////////////////////////////////
-MINE - Used for calculating fields in user object, not sure what is needed yet.
-Probably very similar to around line 430.
+MINE - 
+Grab user ID, email, OS, MAC, CPU
+
 //////////////////////////////////////////////////////////////////////////
 */
 void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
@@ -659,23 +731,26 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 	DWORD comp2 = 2;
 	DWORD tot = 2;
 
+	char* userMac;
+	char* proccessorInfo;
+
 	//create progress box
 	//Start Progress Dialog and give it a title
-	ppd->StartProgressDialog(hwndOwner,NULL,PROGDLG_MODAL,NULL);
-	ppd->SetTitle(L"This Is A Progress Box");
+	//ppd->StartProgressDialog(hwndOwner,NULL,PROGDLG_MODAL,NULL);
+	//ppd->SetTitle(L"This Is A Progress Box");
 
 	//set progress to 50 %
-	ppd->SetProgress(comp,tot);
+	//ppd->SetProgress(comp,tot);
 
 	//sleep for two seconds to simulate "work"
-	Sleep(2000);		
+	//Sleep(2000);		
 
 	//check if cancel
-	if(ppd->HasUserCancelled())
-	{
-		//if so close dialog box
-		ppd->StopProgressDialog();
-	}
+	//if(ppd->HasUserCancelled())
+	//{
+	//	//if so close dialog box
+	//	ppd->StopProgressDialog();
+	//}
 
 
 	//ldap call
@@ -694,22 +769,62 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 		DWORD dwNumber = sizeof(pszAttrs) / sizeof(LPWSTR);
 		hr = ADsBuildVarArrayStr(pszAttrs, dwNumber, &var);
 
+		/*
+		Determine OS version
+		*/
+
+		//for OS version
+		OSVERSIONINFO osvi;
+
+		ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
+		osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+		GetVersionEx(&osvi);
+
+		DWORD major, minor;
+		BSTR ver;
+
+		//https://msdn.microsoft.com/en-us/library/windows/desktop/ms724833(v=vs.85).aspx
+		major = osvi.dwMajorVersion;
+		minor = osvi.dwMinorVersion;
+		
+
+		if( major == 10 && minor == 0)
+			ver = L"Win10";
+		else if (major == 6 && minor == 3)
+			ver = L"Win8.1";
+		else if (major == 6 && minor == 2)
+			ver = L"Win8";
+		else if (major == 6 && minor == 1)
+			ver = L"Win7";
+		else
+			ver = L"NOTDEFINED";
+
+		//get mac address
+		userMac = GetMacAddress();
+	
+		//get CPU info
+		proccessorInfo = GetProcessor();
+
 		//get email 
 		BSTR email;
 		hr = user->get_EmailAddress(&email);
-
+		BSTR id;
+		hr = user->get_Name(&id);
+		//get id/name
+		//ht = user->get_Name(&name);
 		//TODO: Does this authenticate out correctly and write out to file?
 		//write email to file in C:\Temp\G_out.txt 
 		OutputWrite(email);
+		OutputWrite(id);
 
 
 	}
 
 	//set to 100% done
-	ppd->SetProgress(comp2,tot);
+	//ppd->SetProgress(comp2,tot);
 	
 	 //close
-	ppd->StopProgressDialog();
+	//ppd->StopProgressDialog();
 }
 
 // Using WinHTTP make a connection to the ASM server and POST data

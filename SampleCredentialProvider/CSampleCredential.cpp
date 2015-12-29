@@ -37,15 +37,20 @@
 //progressdialogbox
 #include <Shlobj.h>
 
+//for http
+#include <winhttp.h>
+
 void DebugWrite(_com_error e)
-{
-	char str[32];
-	sprintf(str, "ERROR: %s\n", e);
-	DWORD bytesWritten;
-	HANDLE _fh;
-	_fh = CreateFile("C:\\Temp\\DEBUG.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	WriteFile(_fh, str, (DWORD)strlen(str), &bytesWritten, NULL);
-	CloseHandle(_fh);
+{	
+	FILE* f;
+	f = _wfopen( L"C:\\Temp\\DEBUG.txt", L"a");
+	if(f != NULL){ 
+		fwrite(e.ErrorMessage(), sizeof(TCHAR), strlen(e.ErrorMessage()), f);
+		//fwrite( e.ErrorMessage(), sizeof(WCHAR), wcslen(e.ErrorMessage().c_str()), f);
+		fwrite( L"\n", sizeof(WCHAR), wcslen(L"\n"), f);
+		fwrite( L"----------\n", sizeof(WCHAR), wcslen(L"----------\n"), f);
+		fclose(f);
+	}
 }
 void OutputWrite(PWSTR s)
 {
@@ -140,6 +145,9 @@ HRESULT CSampleCredential::Initialize(
 
 	_cpus = cpus;
 
+	// Init local domain to NULL
+	_pDomainName = NULL;
+
 	// Copy the field descriptors for each field. This is useful if you want to vary the 
 	// field descriptors based on what Usage scenario the credential was created for.
 	for (DWORD i = 0; SUCCEEDED(hr) && i < ARRAYSIZE(_rgCredProvFieldDescriptors); i++)
@@ -168,7 +176,6 @@ HRESULT CSampleCredential::Initialize(
 		wchar_t buf[80];
 		wcscpy(buf, L"Log on to: ");
 		wcscat(buf, GetDomain());
-		OutputWrite(buf);
 		hr = SHStrDupW(buf, &_rgFieldStrings[SFI_DOMAIN]);
     }
 
@@ -367,11 +374,45 @@ HRESULT CSampleCredential::SetStringValue(
 			PWSTR _p = wcsrchr(_rgFieldStrings[SFI_USERNAME], L'\\');
 			if(_p != NULL)
 			{
-				PWSTR _temp = NULL;
-				_temp = ConcatLStrings(_rgFieldStrings[SFI_DOMAIN], _p+1);
-
+				wchar_t* tok = wcstok(_rgFieldStrings[SFI_USERNAME], L"\\");
+				_p = tok;
 				// Replace the text for SFI_DOMAIN
-				//hr = SHStrDupW(_temp, &_rgFieldStrings[SFI_DOMAIN]);				
+				wchar_t buf[80];
+				wcscpy(buf, _p);
+				if(wcslen(buf) == 1)
+				{
+					if(wcscmp(buf, L".") == 0)
+					{
+						// Set Log on to text to LOCALHOST
+						wchar_t _b[80];
+						wcscpy(_b, L"Log on to: ");
+						WCHAR wsz[MAX_COMPUTERNAME_LENGTH+1];
+						DWORD cch = ARRAYSIZE(wsz);
+						GetComputerNameW(wsz, &cch);
+						wcscat(_b, wsz);
+						hr = _pCredProvCredentialEvents->SetFieldString(this, SFI_DOMAIN, _b);
+						_pDomainName = _b;
+					}
+				}
+				else
+				{
+					// Set log on to text of user entered DOMAIN
+					wchar_t _b[80];
+					wcscpy(_b, L"Log on to: ");
+					wcscat(_b, _p);
+					hr = _pCredProvCredentialEvents->SetFieldString(this, SFI_DOMAIN, _b);	
+					_pDomainName = _b;
+				}
+			}
+			else
+			{
+				// Reset local domain var
+				_pDomainName = NULL;
+
+				wchar_t _b[80];
+				wcscpy(_b, L"Log on to: ");
+				wcscat(_b, GetDomain());
+				hr = _pCredProvCredentialEvents->SetFieldString(this, SFI_DOMAIN, _b);
 			}
 		}
 		
@@ -457,12 +498,12 @@ HRESULT CSampleCredential::CommandLinkClicked(DWORD dwFieldID)
 }
 //------ end of methods for controls we don't have in our tile ----//
 
-
 void WriteADInfo(PWSTR pw, PWSTR u)
 {
 	HRESULT hr;
 	IADs *pUser;
 	IADsContainer *container = NULL;
+	IDirectorySearch *pDSSearch = NULL;
 	IADsUser *user = NULL;
 	CoInitialize(NULL);
 	/// WinNT - used to communicate with windows domain controllers.
@@ -480,82 +521,105 @@ void WriteADInfo(PWSTR pw, PWSTR u)
 	//hr = ADsGetObject(L"WinNT://contoso/u0270473,user", IID_IADs, (void**)&pUser);
 	//hr = ADsGetObject(L"WinNT://contoso/u0270473", IID_IADsUser, (void**)&user);
 	LPWSTR pszDomain = GetDomain();	
+
+	/**** TODO !!!!!!!!!!!!!
+	**/
+	//if(_pDomainName != NULL)
+	//{
+	//	USE IT ^^^ 
+	//}
+	OutputWrite(u);
+	OutputWrite(pw);
+	wchar_t dbuf[64];
 	if(pszDomain != NULL)
 	{
-		//LPWSTR usr = L"\\u0270473";
-		//std::wstring ws = pszDomain;
-		//ws += usr;
-		//LPCWSTR concat = ws.c_str();//pszDomain + usr;
-		hr = ADsOpenObject(L"LDAP://CN=seth walsh, CN=Users, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
-		//hr = ADsOpenObject(L"LDAP://CN=seth walsh, CN=Users, DC=contoso, DC=local", concat, L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+		wchar_t dbuf[64];
+		wcscpy(dbuf, L"LDAP://");
+		wcscat(dbuf, GetDomain());
+		hr = ADsOpenObject(dbuf, u, pw, ADS_SECURE_AUTHENTICATION, IID_IDirectorySearch, (void**)&pDSSearch);
+		//hr = ADsOpenObject(L"LDAP://CN=seth walsh, CN=Users, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
 	}
-	else
-		hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", L"contoso.local\\u0270473", L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+	//else
+	//	hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", L"contoso.local\\u0270473", L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+	
 	//hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", L"contoso.local\\u0270473", L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
 	//hr = ADsGetObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", IID_IADsUser, (void**)&user);
 	//hr = ADsGetObject(L"WinNT://contoso", IID_IADsContainer, (void**)&container);
 
 	//hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
 
-	OutputWrite(pw);
-	OutputWrite(u);
-	
 	if(SUCCEEDED(hr))
 	{
 		BSTR bstrName;
+		//OutputWrite(u);
+		//OutputWrite(pw);
 
+		// Search for the DistinguishedName
+		LPWSTR pszAttr[] = {L"distinguishedname"};
+		ADS_SEARCH_HANDLE hSearch;
+
+		wchar_t buf[128];
+		wcscpy(buf, L"(&(objectClass=user)(objectCategory=person)(sAMAccountName=");
+		wcscat(buf, u);
+		wcscat(buf, L"))");
+
+		hr = pDSSearch->ExecuteSearch(buf, pszAttr, 1, &hSearch);
+		if(!SUCCEEDED(hr))
+			DebugWrite(_com_error(hr));
+		hr = pDSSearch->GetFirstRow(hSearch);
+		if(!SUCCEEDED(hr))
+			DebugWrite(_com_error(hr));
+		ADS_SEARCH_COLUMN column;
+		hr = pDSSearch->GetColumn(hSearch, L"distinguishedName", &column);
+		if(!SUCCEEDED(hr))
+			DebugWrite(_com_error(hr));
+		PWSTR s = column.pADsValues->DNString;
+		pDSSearch->Release();
+		OutputWrite(s);
+
+		wchar_t _d[128];
+		wcscpy(_d, L"LDAP://");
+		//wcscat(_d, GetDomain());
+		wcscat(_d, s);
+		OutputWrite(_d);
+		hr = ADsOpenObject(_d, u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+		if(!SUCCEEDED(hr))
+			DebugWrite(_com_error(hr));
+		//DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
+		//DWORD dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
+		//if(info->MachineRole == DsRole_RoleMemberWorkstation)//DsRole_RoleStandaloneWorkstation)		
+		
 		// GetInfo Load property values
 		VARIANT var;
 		VariantInit(&var);
 		LPWSTR pszAttrs[] = { L"EmailAddress" };
 		DWORD dwNumber = sizeof(pszAttrs) / sizeof(LPWSTR);
 		hr = ADsBuildVarArrayStr(pszAttrs, dwNumber, &var);
-
 		if(!SUCCEEDED(hr))
-		{
 			DebugWrite(_com_error(hr));
-		}
 
 		hr = user->GetInfoEx(var, 0);
-
 		if(!SUCCEEDED(hr))
-		{
 			DebugWrite(_com_error(hr));
-		}
-
 		VariantClear(&var);
-
-		//hr = user->GetInfo(); // does nothing atm?
-
-		if(!SUCCEEDED(hr))
-		{
-			_com_error err(hr);			
-		}				
+			
 		// Get property
-
-		//hr = user->Get(BSTR("EmailAddress"), &var);
 		BSTR email;
 		hr = user->get_EmailAddress(&email);
-
-		if(SUCCEEDED(hr))
-		{
-			//SysFreeString(bstrName);			
-			OutputWrite(email);
-		}
-		else
-		{
+		if(!SUCCEEDED(hr))
 			DebugWrite(_com_error(hr));
-		}
-
-
+		else
+			OutputWrite(email);
 
 		//pUser->Release();
 		VariantClear(&var);
+		//pDSSearch->Release();
 		user->Release();		
 	}
 	else
 	{
 		DebugWrite(_com_error(hr));
+		OutputWrite(L"Failed to do the LDAP stuff");
 	}
 }/** MINE **/
 void WriteSysInfo()
@@ -648,6 +712,44 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 	ppd->StopProgressDialog();
 }
 
+// Using WinHTTP make a connection to the ASM server and POST data
+BOOL ConnectASMServer(PWSTR data)
+{
+	HINTERNET hSession = NULL, hConnect = NULL, hRequest = NULL;
+	BOOL bResults = FALSE;
+
+	// Obtain a session handle
+	hSession = WinHttpOpen(L"aPersona ASM Windows Authentication",
+		WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+		WINHTTP_NO_PROXY_NAME,
+		WINHTTP_NO_PROXY_BYPASS,
+		0);
+
+	// Specify the HTTP server you are targeting
+	if(hSession)
+		hConnect = WinHttpConnect(hSession, L"www.asm-server.com", INTERNET_DEFAULT_HTTP_PORT, 0);
+
+	// Create an HTTP Request Handle
+	if(hConnect)
+		hRequest = WinHttpOpenRequest(hConnect, L"PUT", L"/writetest.txt", NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
+
+	// Send a request
+	if(hRequest)
+		bResults = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+
+	// ADDITIONAL CODE HERE
+
+	// Errors
+	if(!bResults)
+		printf("Error %d\n", GetLastError());
+
+	// Close open handles
+	if(hRequest)WinHttpCloseHandle(hRequest);
+	if(hConnect)WinHttpCloseHandle(hConnect);
+	if(hSession)WinHttpCloseHandle(hSession);
+
+	return bResults;
+}
 
 // Collect the username and password into a serialized credential for the correct usage scenario 
 // (logon/unlock is what's demonstrated in this sample).  LogonUI then passes these credentials 
@@ -794,6 +896,7 @@ HRESULT CSampleCredential::GetSerialization(
 				splitUser = _rgFieldStrings[SFI_USERNAME];
 					
 			//OutputWrite(_rgFieldStrings[SFI_USERNAME]);
+			WriteADInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME]);
 			//OutputWrite(splitDomain);
 			//OutputWrite(splitUser);
 

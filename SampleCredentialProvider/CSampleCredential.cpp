@@ -43,15 +43,14 @@
 //mac addr fetching
 #include <Iphlpapi.h>
 
-<<<<<<< HEAD
 //for sha1
 #include <WinCrypt.h>
-=======
+
 //generating hash
-#include <openssl/sha.h>
+//#include <openssl/sha.h>
+#include "sha1.h"
 #include <time.h>
 
->>>>>>> 94ce02dd9d7dbd1dc6a56d1cb8ac7440d9be49f6
 
 void DebugWrite(_com_error e)
 {	
@@ -824,8 +823,8 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 
 		//compute SHA
 		size_t length = sizeof(userMac);
-		unsigned char finalHash[SHA_DIGEST_LENGTH];
-		SHA1((unsigned char*)userMac,length,finalHash);
+		//unsigned char finalHash[SHA_DIGEST_LENGTH];
+		//SHA1((unsigned char*)userMac,length,finalHash);
 		//finalHash now contains the hashed mac addr
 
 		

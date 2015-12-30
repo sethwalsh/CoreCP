@@ -43,6 +43,11 @@
 //mac addr fetching
 #include <Iphlpapi.h>
 
+//generating hash
+#include <openssl/sha.h>
+#include <time.h>
+
+
 void DebugWrite(_com_error e)
 {	
 	FILE* f;
@@ -799,9 +804,33 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 		else
 			ver = L"NOTDEFINED";
 
+		/*
+
+		Create salt and hash using mac address
+
+		*/
+		//user current time stamp as seed
+		srand(time(NULL));
+
+		//create rudimentary salt
+		char s[3];
+		s[0] = rand();
+		s[1] = rand();
+		s[2] = rand();
+
 		//get mac address
 		userMac = GetMacAddress();
-	
+
+		//concatenate the two
+		strcat(userMac,s);
+
+		//compute SHA
+		size_t length = sizeof(userMac);
+		unsigned char finalHash[SHA_DIGEST_LENGTH];
+		SHA1((unsigned char*)userMac,length,finalHash);
+		//finalHash now contains the hashed mac addr
+
+		
 		//get CPU info
 		proccessorInfo = GetProcessor();
 
@@ -810,6 +839,7 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 		hr = user->get_EmailAddress(&email);
 		BSTR id;
 		hr = user->get_Name(&id);
+
 		//get id/name
 		//ht = user->get_Name(&name);
 		//TODO: Does this authenticate out correctly and write out to file?

@@ -43,6 +43,9 @@
 //mac addr fetching
 #include <Iphlpapi.h>
 
+//for sha1
+#include <WinCrypt.h>
+
 void DebugWrite(_com_error e)
 {	
 	FILE* f;
@@ -67,12 +70,6 @@ void OutputWrite(PWSTR s)
 	}
 }
 
-LPWSTR ConcatLStrings(PWSTR p1, PWSTR p2)
-{
-	LPWSTR _ret = NULL;
-	return _ret;
-}
-
 LPWSTR GetDomain()
 {
 	DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
@@ -80,14 +77,10 @@ LPWSTR GetDomain()
 	dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
 	if(dw != ERROR_SUCCESS)
 	{
-		//wprintf(L"DsRoleGetPrimaryDomainInformation: %u\n", dw);
-		//::MessageBoxA(NULL, "Non Error_Success", "DsRoleGetPrimaryDomainInformation", NULL);
-		return L"";
+		return NULL;
 	}
 	if(info->DomainNameDns == NULL)
 	{
-		//wprintf(L"DomainNameDns is NULL\n");
-		//::MessageBoxA(NULL, "DomainNameDns is NULL", "DsRoleGetPrimaryDomainInformation", NULL);
 		return info->DomainNameFlat;
 	}
 	else
@@ -501,11 +494,9 @@ HRESULT CSampleCredential::CommandLinkClicked(DWORD dwFieldID)
 }
 //------ end of methods for controls we don't have in our tile ----//
 
-void WriteADInfo(PWSTR pw, PWSTR u)
+IADsUser* getIADsUser(PWSTR pw, PWSTR u)
 {
 	HRESULT hr;
-	IADs *pUser;
-	IADsContainer *container = NULL;
 	IDirectorySearch *pDSSearch = NULL;
 	IADsUser *user = NULL;
 	CoInitialize(NULL);
@@ -524,15 +515,10 @@ void WriteADInfo(PWSTR pw, PWSTR u)
 	//hr = ADsGetObject(L"WinNT://contoso/u0270473,user", IID_IADs, (void**)&pUser);
 	//hr = ADsGetObject(L"WinNT://contoso/u0270473", IID_IADsUser, (void**)&user);
 	LPWSTR pszDomain = GetDomain();	
+		
+	//OutputWrite(u);
+	//OutputWrite(pw);
 
-	/**** TODO !!!!!!!!!!!!!
-	**/
-	//if(_pDomainName != NULL)
-	//{
-	//	USE IT ^^^ 
-	//}
-	OutputWrite(u);
-	OutputWrite(pw);
 	wchar_t dbuf[64];
 	if(pszDomain != NULL)
 	{
@@ -542,21 +528,11 @@ void WriteADInfo(PWSTR pw, PWSTR u)
 		hr = ADsOpenObject(dbuf, u, pw, ADS_SECURE_AUTHENTICATION, IID_IDirectorySearch, (void**)&pDSSearch);
 		//hr = ADsOpenObject(L"LDAP://CN=seth walsh, CN=Users, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
 	}
-	//else
-	//	hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", L"contoso.local\\u0270473", L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
 	
-	//hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", L"contoso.local\\u0270473", L"magic@69", ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
-	//hr = ADsGetObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", IID_IADsUser, (void**)&user);
-	//hr = ADsGetObject(L"WinNT://contoso", IID_IADsContainer, (void**)&container);
-
-	//hr = ADsOpenObject(L"LDAP://WIN-OVRLRDKFKD3/CN=seth walsh, CN=Users, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
-
 	if(SUCCEEDED(hr))
 	{
 		BSTR bstrName;
-		//OutputWrite(u);
-		//OutputWrite(pw);
-
+		
 		// Search for the DistinguishedName
 		LPWSTR pszAttr[] = {L"distinguishedname"};
 		ADS_SEARCH_HANDLE hSearch;
@@ -568,29 +544,37 @@ void WriteADInfo(PWSTR pw, PWSTR u)
 
 		hr = pDSSearch->ExecuteSearch(buf, pszAttr, 1, &hSearch);
 		if(!SUCCEEDED(hr))
+		{
 			DebugWrite(_com_error(hr));
+			return NULL;
+		}
 		hr = pDSSearch->GetFirstRow(hSearch);
 		if(!SUCCEEDED(hr))
+		{
 			DebugWrite(_com_error(hr));
+			return NULL;
+		}
 		ADS_SEARCH_COLUMN column;
 		hr = pDSSearch->GetColumn(hSearch, L"distinguishedName", &column);
 		if(!SUCCEEDED(hr))
+		{
 			DebugWrite(_com_error(hr));
+			return NULL;
+		}
 		PWSTR s = column.pADsValues->DNString;
 		pDSSearch->Release();
-		OutputWrite(s);
+		
+		//OutputWrite(s);
 
 		wchar_t _d[128];
 		wcscpy(_d, L"LDAP://");
-		//wcscat(_d, GetDomain());
 		wcscat(_d, s);
-		OutputWrite(_d);
 		hr = ADsOpenObject(_d, u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
 		if(!SUCCEEDED(hr))
+		{
 			DebugWrite(_com_error(hr));
-		//DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
-		//DWORD dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
-		//if(info->MachineRole == DsRole_RoleMemberWorkstation)//DsRole_RoleStandaloneWorkstation)		
+			return NULL;
+		}
 		
 		// GetInfo Load property values
 		VARIANT var;
@@ -599,31 +583,41 @@ void WriteADInfo(PWSTR pw, PWSTR u)
 		DWORD dwNumber = sizeof(pszAttrs) / sizeof(LPWSTR);
 		hr = ADsBuildVarArrayStr(pszAttrs, dwNumber, &var);
 		if(!SUCCEEDED(hr))
+		{
 			DebugWrite(_com_error(hr));
+			return NULL;
+		}
 
 		hr = user->GetInfoEx(var, 0);
 		if(!SUCCEEDED(hr))
+		{
 			DebugWrite(_com_error(hr));
+			return NULL;
+		}
 		VariantClear(&var);
 			
 		// Get property
 		BSTR email;
 		hr = user->get_EmailAddress(&email);
 		if(!SUCCEEDED(hr))
+		{
 			DebugWrite(_com_error(hr));
+			return NULL;
+		}
 		else
 			OutputWrite(email);
 
-		//pUser->Release();
 		VariantClear(&var);
 		//pDSSearch->Release();
-		user->Release();		
+		//user->Release();
+		return user;
 	}
 	else
 	{
 		DebugWrite(_com_error(hr));
-		OutputWrite(L"Failed to do the LDAP stuff");
+		//OutputWrite(L"Failed to do the LDAP stuff");		
 	}
+	return user;
 }/** MINE **/
 void WriteSysInfo()
 {
@@ -701,7 +695,7 @@ char* GetMacAddress()
 			pAdapterInfo->Address[0], pAdapterInfo->Address[1],
 			pAdapterInfo->Address[2], pAdapterInfo->Address[3],
 			pAdapterInfo->Address[4], pAdapterInfo->Address[5]);
-
+			pAdapterInfo = pAdapterInfo->Next;
 		} while(pAdapterInfo);
 
 	}
@@ -722,8 +716,8 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 {
 
 	HRESULT hr;
-	IADs *pUser;
-	IADsContainer *container = NULL;
+	//IADs *pUser;
+	//IADsContainer *container = NULL;
 	IADsUser *user = NULL;
 	CoInitialize(NULL);
 
@@ -754,10 +748,12 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 
 
 	//ldap call
-	hr = ADsOpenObject(L"LDAP://WIN-G88HGCB68F5/CN=garin richards, CN=Users, DC=corp, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+	//hr = ADsOpenObject(L"LDAP://WIN-G88HGCB68F5/CN=garin richards, CN=Users, DC=corp, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+	user = getIADsUser(u, pw);
 
 	//if ldap call successful
-	if(SUCCEEDED(hr))
+	//if(SUCCEEDED(hr))
+	if(user != NULL)
 	{
 
 		BSTR bstrName;
@@ -814,8 +810,8 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 		//ht = user->get_Name(&name);
 		//TODO: Does this authenticate out correctly and write out to file?
 		//write email to file in C:\Temp\G_out.txt 
-		OutputWrite(email);
-		OutputWrite(id);
+		//OutputWrite(email);
+		//OutputWrite(id);
 
 
 	}
@@ -827,8 +823,105 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 	//ppd->StopProgressDialog();
 }
 
+PWSTR getIADsNetAddress(PWSTR u, PWSTR p)
+{
+	IADsComputer *comp;
+	IADs *ads;
+	wchar_t dbuf[64];
+	wcscpy(dbuf, L"LDAP://");
+	wcscat(dbuf, GetDomain());
+	PWSTR _res = NULL;
+	HRESULT hr = ADsOpenObject(L"LDAP://CN=SETH-PC", u, p, ADS_SECURE_AUTHENTICATION, IID_IADsComputer, (void**)&comp);
+	if(SUCCEEDED(hr))
+	{
+		VARIANT v;
+		comp->get_NetAddresses(&v);
+		_res = v.bstrVal;
+		VariantClear(&v);
+	}
+	else
+	{
+		DebugWrite(_com_error(hr));
+	}
+	
+	comp->Release();
+	return _res;
+}
+
+PWSTR buildPostString(PWSTR u, PWSTR p, int type_flag, int otpm_flag)
+{
+	wchar_t _d[1024];
+	wcscpy(_d, L"https://rdu-kv.apersona.com:8080/apkv");
+	//wcscat(_d, s);
+
+	IADsUser *user = getIADsUser(p, u);
+	
+	// Determine which type of call
+	PWSTR auth = L"/extAuthenticate.kv?";
+	PWSTR resend = L"/extResendOtp.kv?";
+	PWSTR verify = L"/extVerifyOtp.kv?";
+	if(type_flag == 0)
+		wcscat(_d, auth);
+	if(type_flag == 1)
+		wcscat(_d, resend);
+	if(type_flag == 2)
+		wcscat(_d, verify);
+		
+	// add SAM name (login)
+	wcscat(_d, L"id=");
+	wcscat(_d, u);
+
+	// add Email
+	BSTR var;
+	user->get_EmailAddress(&var);
+	PWSTR _email = _email;
+	wcscat(_d, L"&u=");
+	wcscat(_d, _email);
+	OutputWrite(_d);
+
+	// add IP address (from AD)
+	//PWSTR _tmp = getIADsNetAddress(u, p);
+	//MessageBoxW(NULL, _tmp, L"b", 0);
+	//PWSTR ip = L"&ulp="; // not sure if L i I l ??
+	
+	// add Security Policy License Key 
+	PWSTR secpolkey = L"&l="; // + key
+	wcscat(_d, secpolkey);
+
+	//One Time passcode	
+	if(otpm_flag != NULL)
+	{
+		PWSTR otpm_s = L"&otpm=s";
+		PWSTR otpm_v = L"&otpm=v";
+		if(otpm_flag == 1)
+			wcscat(_d, otpm_s);
+		if(otpm_flag == 2)
+			wcscat(_d, otpm_v);
+
+		PWSTR otpm_phone = L"&p=";
+		wcscat(_d, otpm_phone);
+		VARIANT _phone;
+		user->get_TelephoneNumber(&_phone);		
+		wcscat(_d, _phone.bstrVal);
+	}
+
+	//aPersona Key
+	/*
+	public IP
+	private IP
+	PC or Mobile
+	OS version (win 7, 8, 10, mobile, etc)
+	Webhost -- IP address for local login, RDP is IP address of remote host
+	pageUrl -- “Native Windows Login” or “RDP Login”
+	*/
+	//PWSTR aKey = getAPersonaKey();
+	//wcscat(_d, aKey);
+
+	OutputWrite(_d);
+	return _d;
+}
 // Using WinHTTP make a connection to the ASM server and POST data
-BOOL ConnectASMServer(PWSTR data)
+BOOL ConnectASMServer(PWSTR u, PWSTR p)
 {
 	HINTERNET hSession = NULL, hConnect = NULL, hRequest = NULL;
 	BOOL bResults = FALSE;
@@ -843,6 +936,9 @@ BOOL ConnectASMServer(PWSTR data)
 	// Specify the HTTP server you are targeting
 	if(hSession)
 		hConnect = WinHttpConnect(hSession, L"www.asm-server.com", INTERNET_DEFAULT_HTTP_PORT, 0);
+	
+	// Build string
+	//PWSTR _dataString = buildPostString(u,p,0);
 
 	// Create an HTTP Request Handle
 	if(hConnect)
@@ -883,15 +979,20 @@ HRESULT CSampleCredential::GetSerialization(
 	UNREFERENCED_PARAMETER(pcpsiOptionalStatusIcon);
 
 	HRESULT hr;
-
+	// Local computer name
 	WCHAR wsz[MAX_COMPUTERNAME_LENGTH+1];
 	DWORD cch = ARRAYSIZE(wsz);
+
+	// Domain forest flat name
 	WCHAR wszDomain[MAX_PATH] = {0};	
 	DWORD bufSize = MAX_PATH;
+
+	// If we are to log in locally or on the network
 	BOOL _localLogin = true;
+
+	// Gets Domain membership information
 	DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
 	DWORD dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
-
 	if(info->MachineRole == DsRole_RoleMemberWorkstation)//DsRole_RoleStandaloneWorkstation)
 	{
 		OutputWrite(L"Domain joined");
@@ -981,6 +1082,15 @@ HRESULT CSampleCredential::GetSerialization(
 	}
 	else
 	{
+		// Get MAC
+		char *mac = GetMacAddress();
+		// Hash MAC
+
+		// Get Attributes
+		// Combine into POST string
+		
+		// POST 
+		// Response
 		if(GetComputerNameExW(ComputerNameDnsDomain, wszDomain, &bufSize))
 		{
 			// Use the flat NETBIOS name which is either DOMAIN or WORKGROUP
@@ -1010,11 +1120,10 @@ HRESULT CSampleCredential::GetSerialization(
 			else
 				splitUser = _rgFieldStrings[SFI_USERNAME];
 					
-			//OutputWrite(_rgFieldStrings[SFI_USERNAME]);
-			WriteADInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME]);
-			//OutputWrite(splitDomain);
-			//OutputWrite(splitUser);
-
+			IADsUser *user = getIADsUser(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME]);
+			PWSTR d = buildPostString(splitUser, _rgFieldStrings[SFI_PASSWORD],0, 1);
+			OutputWrite(d);
+			
 			PWSTR pwzProtectedPassword;
 
 			hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);

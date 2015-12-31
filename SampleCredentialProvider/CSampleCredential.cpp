@@ -826,7 +826,16 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 		//unsigned char finalHash[SHA_DIGEST_LENGTH];
 		//SHA1((unsigned char*)userMac,length,finalHash);
 		//finalHash now contains the hashed mac addr
-
+		unsigned char hash[20];
+		char hexstring[41];
+		sha1::calc("Teststring",10,hash); // 10 is the length of the string
+		sha1::toHexString(hash, hexstring);
+		
+		LPWSTR _h;
+		wchar_t _wc[82];
+		mbstowcs(_wc, hexstring, strlen(hexstring)+1);//Plus null
+		_h = _wc;
+		OutputWrite(_h);
 		
 		//get CPU info
 		proccessorInfo = GetProcessor();
@@ -881,6 +890,17 @@ PWSTR getIADsNetAddress(PWSTR u, PWSTR p)
 
 PWSTR buildPostString(PWSTR u, PWSTR p, int type_flag, int otpm_flag)
 {
+	unsigned char hash[20];
+		char hexstring[41];
+		sha1::calc("Teststring",10,hash); // 10 is the length of the string
+		sha1::toHexString(hash, hexstring);
+		
+		LPWSTR _h;
+		wchar_t _wc[82];
+		mbstowcs(_wc, hexstring, strlen(hexstring)+1);//Plus null
+		_h = _wc;
+		OutputWrite(_h);
+
 	wchar_t _d[1024];
 	wcscpy(_d, L"https://rdu-kv.apersona.com:8080/apkv");
 	//wcscat(_d, s);

@@ -16,8 +16,6 @@
 #include "CSampleCredential.h"
 #include "guid.h"
 
-
-
 //#include <atlbase.h>
 #include <AdsHlp.h>
 #include <string>
@@ -47,11 +45,157 @@
 #include <WinCrypt.h>
 
 //generating hash
-//#include <openssl/sha.h>
 #include "sha1.h"
 #include <time.h>
 
+/*************************************************
+NAME/CALL: OpenKey(HKEY hRootKey, wchar_t* strKey)
 
+DESCRIPTION:
+		Attempts to open a given hkey. If
+		the key doesn't exist, it is created.
+
+INPUTS:
+		hRootKey : Where will the key reside? HKEY_LOCAL_MACHINE etc.
+		strKey : name of key
+
+OUTPUTS:
+		HKEY, hk: Reference to key
+
+*************************************************/
+HKEY OpenKey(HKEY hRootKey, LPCTSTR strKey)
+{
+	HKEY hk;
+	LONG err;
+	
+	//attempt to open key
+	err = RegOpenKeyEx(hRootKey, strKey, NULL, KEY_ALL_ACCESS, &hk);
+
+	//does key exist?
+	if(err == ERROR_FILE_NOT_FOUND)
+	{
+		err = RegCreateKeyEx(hRootKey, strKey, NULL, NULL, REG_OPTION_NON_VOLATILE,KEY_ALL_ACCESS,NULL, &hk, NULL);
+	}
+
+	//TODO: What if error?
+	//if (err)
+	//{}
+	return hk;
+}
+
+
+/*************************************************
+NAME/CALL: SetRegDword(HKEY hKey, LPCTSTR lpValue, DWORD data)
+
+DESCRIPTION:
+		Sets a DWORD type field in a given registry key
+
+INPUTS:
+		hkey : Reference to key
+		lpValue : Name of field
+		data : data in type DWORD
+
+*************************************************/
+void SetRegDword(HKEY hKey, LPCTSTR lpValue, DWORD data)
+{
+	//set value field of given key to data
+	LONG nError = RegSetValueEx(hKey, lpValue, NULL, REG_DWORD, (LPBYTE)&data, sizeof(DWORD));
+
+	//TODO: What if error?
+	//if (err)
+	//{}
+}
+
+
+/*************************************************
+NAME/CALL: SetRegString(HKEY hKey, LPCTSTR lpValue, LPCTSTR data)
+
+DESCRIPTION:
+		Sets a LPCTSTR type field in a given registry key
+
+INPUTS:
+		hkey : Reference to key
+		lpValue : Name of field
+		data : data in type LPCTSTR
+
+*************************************************/
+void SetRegString(HKEY hKey, LPCTSTR lpValue, LPCTSTR data)
+{
+	//set value field of given key to data
+	LONG nError = RegSetValueEx(hKey, lpValue, NULL, REG_SZ, (LPBYTE)data, lstrlen(data)*2);
+
+	//TODO: What if error?
+	//if (err)
+	//{}
+}
+
+
+/*************************************************
+NAME/CALL: GetRegDwordVal(HKEY hKey, LPCTSTR lpValue)
+
+DESCRIPTION:	
+		Gets DWORD type data from a given field in 
+		given registry key
+
+INPUTS:
+		hkey: Reference to key
+		lpValue : Name of field
+
+OUTPUTS:
+		data : Data stored in field referred to by
+			name in lpValue.
+
+*************************************************/
+DWORD GetRegDwordVal(HKEY hKey, LPCTSTR lpValue)
+{
+
+	DWORD data;
+	DWORD size = sizeof(data);
+	DWORD type = REG_DWORD;
+	//get value of reg value
+	LONG nError = RegQueryValueEx(hKey, lpValue, NULL, &type, (LPBYTE)&data, &size);
+
+
+	//TODO: What if error or value doesn't exist?
+	//if (err || err == ERROR_FILE_NOT_FOUND)
+	//{}
+
+	return data;
+
+}
+
+/*************************************************
+NAME/CALL: GetRegDwordString(HKEY hKey, LPCTSTR lpValue)
+
+DESCRIPTION:	
+		Gets LPCTSTR type data from a given field in 
+		given registry key
+
+INPUTS:
+		hkey: Reference to key
+		lpValue : Name of field
+
+OUTPUTS:
+		data : Data stored in field referred to by
+			name in lpValue.
+
+*************************************************/
+LPCTSTR GetRegDwordString(HKEY hKey, LPCTSTR lpValue)
+{
+	LPCTSTR data;
+	DWORD size = lstrlen(data)*2;
+	DWORD type = REG_SZ;
+
+	//get value of reg value
+	LONG nError = RegQueryValueEx(hKey, lpValue, NULL, &type, (LPBYTE)&data, &size);
+
+
+	//TODO: What if error or value doesn't exist?
+	//if (err || err == ERROR_FILE_NOT_FOUND)
+	//{}
+
+	return data;
+}
 void DebugWrite(_com_error e)
 {	
 	FILE* f;

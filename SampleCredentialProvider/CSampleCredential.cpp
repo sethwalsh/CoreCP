@@ -48,6 +48,49 @@
 #include "sha1.h"
 #include <time.h>
 
+/*
+Gets MAC Address
+//TODO: http://stackoverflow.com/questions/13646621/how-to-get-mac-address-in-windows-with-c
+*/
+char* GetMacAddress()
+{
+	PIP_ADAPTER_INFO AdapterInfo;
+	DWORD dwBufLen = sizeof(AdapterInfo);
+	char* mac_addr = (char *)malloc(17);
+
+	//allocating memory for getadapterinfo
+	AdapterInfo = (IP_ADAPTER_INFO *) malloc(sizeof(IP_ADAPTER_INFO));
+	
+	if(AdapterInfo == NULL){
+		//TODO: error allocating memory, handle gracefully
+	}
+
+	//call to getadapterinfo to get size for dwbuflen
+	if(GetAdaptersInfo(AdapterInfo,&dwBufLen) == ERROR_BUFFER_OVERFLOW){
+
+		AdapterInfo = (IP_ADAPTER_INFO *) malloc(dwBufLen);
+
+		if(AdapterInfo == NULL){
+			//TODO: Error allocating memory for getadapters info, like above. handle gracefully.
+		}
+	}
+
+	//get the mac addr
+	if(GetAdaptersInfo(AdapterInfo,&dwBufLen) == NO_ERROR) {
+			PIP_ADAPTER_INFO pAdapterInfo = AdapterInfo; //Pointer to adapter info
+		do{
+			//copy over mac addr
+			sprintf(mac_addr, "%02X:%02X:%02X:%02X:%02X:%02X",
+			pAdapterInfo->Address[0], pAdapterInfo->Address[1],
+			pAdapterInfo->Address[2], pAdapterInfo->Address[3],
+			pAdapterInfo->Address[4], pAdapterInfo->Address[5]);
+			pAdapterInfo = pAdapterInfo->Next;
+		} while(pAdapterInfo);
+	}
+
+	free(AdapterInfo);
+	return mac_addr;
+}
 /*************************************************
 NAME/CALL: OpenKey(HKEY hRootKey, wchar_t* strKey)
 
@@ -78,8 +121,8 @@ HKEY OpenKey(HKEY hRootKey, LPCTSTR strKey)
 	}
 
 	//TODO: What if error?
-	//if (err)
-	//{}
+	if (err != ERROR_SUCCESS)
+		return NULL;
 	return hk;
 }
 
@@ -193,8 +236,10 @@ LPCTSTR GetRegDwordString(HKEY hKey, LPCTSTR lpValue)
 	//TODO: What if error or value doesn't exist?
 	//if (err || err == ERROR_FILE_NOT_FOUND)
 	//{}
-
-	return data;
+	if(nError == ERROR_SUCCESS)
+		return data;
+	else
+		return NULL;
 }
 void DebugWrite(_com_error e)
 {	
@@ -666,23 +711,17 @@ IADsUser* getIADsUser(PWSTR pw, PWSTR u)
 	//hr = ADsGetObject(L"WinNT://contoso/u0270473", IID_IADsUser, (void**)&user);
 	LPWSTR pszDomain = GetDomain();	
 		
-	//OutputWrite(u);
-	//OutputWrite(pw);
-
 	wchar_t dbuf[64];
 	if(pszDomain != NULL)
 	{
 		wchar_t dbuf[64];
 		wcscpy(dbuf, L"LDAP://");
-		wcscat(dbuf, GetDomain());
-		hr = ADsOpenObject(dbuf, u, pw, ADS_SECURE_AUTHENTICATION, IID_IDirectorySearch, (void**)&pDSSearch);
-		//hr = ADsOpenObject(L"LDAP://CN=seth walsh, CN=Users, DC=contoso, DC=local", u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+		wcscat(dbuf, pszDomain);
+		hr = ADsOpenObject(dbuf, u, pw, ADS_SECURE_AUTHENTICATION, IID_IDirectorySearch, (void**)&pDSSearch);		
 	}
 	
 	if(SUCCEEDED(hr))
 	{
-		BSTR bstrName;
-		
 		// Search for the DistinguishedName
 		LPWSTR pszAttr[] = {L"distinguishedname"};
 		ADS_SEARCH_HANDLE hSearch;
@@ -695,102 +734,42 @@ IADsUser* getIADsUser(PWSTR pw, PWSTR u)
 		hr = pDSSearch->ExecuteSearch(buf, pszAttr, 1, &hSearch);
 		if(!SUCCEEDED(hr))
 		{
-			DebugWrite(_com_error(hr));
+			//DebugWrite(_com_error(hr));
 			return NULL;
 		}
 		hr = pDSSearch->GetFirstRow(hSearch);
 		if(!SUCCEEDED(hr))
 		{
-			DebugWrite(_com_error(hr));
+			//DebugWrite(_com_error(hr));
 			return NULL;
 		}
 		ADS_SEARCH_COLUMN column;
 		hr = pDSSearch->GetColumn(hSearch, L"distinguishedName", &column);
 		if(!SUCCEEDED(hr))
 		{
-			DebugWrite(_com_error(hr));
+			//DebugWrite(_com_error(hr));
 			return NULL;
 		}
 		PWSTR s = column.pADsValues->DNString;
 		pDSSearch->Release();
-		
-		//OutputWrite(s);
-
+				
 		wchar_t _d[128];
 		wcscpy(_d, L"LDAP://");
 		wcscat(_d, s);
 		hr = ADsOpenObject(_d, u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
 		if(!SUCCEEDED(hr))
 		{
-			DebugWrite(_com_error(hr));
+			//DebugWrite(_com_error(hr));
 			return NULL;
-		}
-		
-		// GetInfo Load property values
-		VARIANT var;
-		VariantInit(&var);
-		LPWSTR pszAttrs[] = { L"EmailAddress" };
-		DWORD dwNumber = sizeof(pszAttrs) / sizeof(LPWSTR);
-		hr = ADsBuildVarArrayStr(pszAttrs, dwNumber, &var);
-		if(!SUCCEEDED(hr))
-		{
-			DebugWrite(_com_error(hr));
-			return NULL;
-		}
-
-		hr = user->GetInfoEx(var, 0);
-		if(!SUCCEEDED(hr))
-		{
-			DebugWrite(_com_error(hr));
-			return NULL;
-		}
-		VariantClear(&var);
-			
-		// Get property
-		BSTR email;
-		hr = user->get_EmailAddress(&email);
-		if(!SUCCEEDED(hr))
-		{
-			DebugWrite(_com_error(hr));
-			return NULL;
-		}
-		else
-			OutputWrite(email);
-
-		VariantClear(&var);
-		//pDSSearch->Release();
-		//user->Release();
+		}		
 		return user;
-	}
-	else
-	{
-		DebugWrite(_com_error(hr));
-		//OutputWrite(L"Failed to do the LDAP stuff");		
-	}
+	}	
 	return user;
-}/** MINE **/
-void WriteSysInfo()
-{
-	//system info struct
-	SYSTEM_INFO _si;
-
-	//get sysinfo
-	GetSystemInfo(&_si);
-
-	char str[10];//;[] = _si.dwProcessorType;
-	sprintf(str, "%lu", _si.dwProcessorType);
-	DWORD bytesWritten;
-	HANDLE _fh;
-	_fh = CreateFile("C:\\Temp\\SYS_INFO.txt", GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-	WriteFile(_fh, str, (DWORD)strlen(str), &bytesWritten, NULL);
-	CloseHandle(_fh);
 }
-
 /*
 Gets Processor ID
 */
 char* GetProcessor() {
-
 	char procInfo[10];
 
 	//sys info struct
@@ -803,56 +782,6 @@ char* GetProcessor() {
 	sprintf(procInfo,  "%lu", _si.dwProcessorType);
 
 	return procInfo;
-
-}
-
-/*
-Gets MAC Address
-//TODO: http://stackoverflow.com/questions/13646621/how-to-get-mac-address-in-windows-with-c
-*/
-char* GetMacAddress()
-{
-	PIP_ADAPTER_INFO AdapterInfo;
-	DWORD dwBufLen = sizeof(AdapterInfo);
-	char* mac_addr = (char *)malloc(17);
-
-	//allocating memory for getadapterinfo
-	AdapterInfo = (IP_ADAPTER_INFO *) malloc(sizeof(IP_ADAPTER_INFO));
-	
-	if(AdapterInfo == NULL){
-		//TODO: error allocating memory, handle gracefully
-	}
-
-	//call to getadapterinfo to get size for dwbuflen
-	if(GetAdaptersInfo(AdapterInfo,&dwBufLen) == ERROR_BUFFER_OVERFLOW){
-
-		AdapterInfo = (IP_ADAPTER_INFO *) malloc(dwBufLen);
-
-		if(AdapterInfo == NULL){
-			//TODO: Error allocating memory for getadapters info, like above. handle gracefully.
-		}
-
-	}
-
-	//get the mac addr
-	if(GetAdaptersInfo(AdapterInfo,&dwBufLen) == NO_ERROR) {
-
-			PIP_ADAPTER_INFO pAdapterInfo = AdapterInfo; //Pointer to adapter info
-
-		do{
-			//copy over mac addr
-			sprintf(mac_addr, "%02X:%02X:%02X:%02X:%02X:%02X",
-			pAdapterInfo->Address[0], pAdapterInfo->Address[1],
-			pAdapterInfo->Address[2], pAdapterInfo->Address[3],
-			pAdapterInfo->Address[4], pAdapterInfo->Address[5]);
-			pAdapterInfo = pAdapterInfo->Next;
-		} while(pAdapterInfo);
-
-	}
-
-	free(AdapterInfo);
-	return mac_addr;
-
 }
 
 /*
@@ -1007,31 +936,6 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 	//ppd->StopProgressDialog();
 }
 
-PWSTR getIADsNetAddress(PWSTR u, PWSTR p)
-{
-	IADsComputer *comp;
-	IADs *ads;
-	wchar_t dbuf[64];
-	wcscpy(dbuf, L"LDAP://");
-	wcscat(dbuf, GetDomain());
-	PWSTR _res = NULL;
-	HRESULT hr = ADsOpenObject(L"LDAP://CN=SETH-PC", u, p, ADS_SECURE_AUTHENTICATION, IID_IADsComputer, (void**)&comp);
-	if(SUCCEEDED(hr))
-	{
-		VARIANT v;
-		comp->get_NetAddresses(&v);
-		_res = v.bstrVal;
-		VariantClear(&v);
-	}
-	else
-	{
-		DebugWrite(_com_error(hr));
-	}
-	
-	comp->Release();
-	return _res;
-}
-
 PWSTR buildPostString(PWSTR u, PWSTR p, int type_flag, int otpm_flag)
 {
 	unsigned char hash[20];
@@ -1116,8 +1020,14 @@ PWSTR buildPostString(PWSTR u, PWSTR p, int type_flag, int otpm_flag)
 	return _d;
 }
 // Using WinHTTP make a connection to the ASM server and POST data
-BOOL ConnectASMServer(PWSTR u, PWSTR p)
+HRESULT ConnectASMServer(PWSTR _url,PWSTR _key,PWSTR _hash,PWSTR _fName,PWSTR _email,PWSTR _telephone,PWSTR splitUser,DWORD *_httpResult, DWORD _flag)
 {
+	// Return any errors with this unless http return codes from API are gotten then use those
+	HRESULT hr;
+
+	// Holds the return value from the HTTP post call
+	DWORD _ret = NULL;
+
 	HINTERNET hSession = NULL, hConnect = NULL, hRequest = NULL;
 	BOOL bResults = FALSE;
 
@@ -1128,38 +1038,143 @@ BOOL ConnectASMServer(PWSTR u, PWSTR p)
 		WINHTTP_NO_PROXY_BYPASS,
 		0);
 
-	// Specify the HTTP server you are targeting
+	// Specify the HTTP server you are targeting	
 	if(hSession)
-		hConnect = WinHttpConnect(hSession, L"www.asm-server.com", INTERNET_DEFAULT_HTTP_PORT, 0);
+		hConnect = WinHttpConnect(hSession, _url, INTERNET_DEFAULT_HTTP_PORT, 0);
 	
 	// Build string
-	//PWSTR _dataString = buildPostString(u,p,0);
+	LPSTR _data = NULL;
+	wchar_t _d[1024];
+	
+	PWSTR auth = L"/extAuthenticate.kv?";
+	PWSTR resend = L"/extResendOtp.kv?";
+	PWSTR verify = L"/extVerifyOtp.kv?";
+	if(_flag == 1)
+		wcscpy(_d, auth);
+	else if(_flag == 2)
+		wcscpy(_d, resend);
+	else if(_flag == 3)
+		wcscpy(_d, verify);
+	
+	// User name
+	if(splitUser != NULL)
+	{
+		wcscpy(_d, L"id=");
+		wcscpy(_d, splitUser);
+	}
 
-	// Create an HTTP Request Handle
+	// Users email address
+	if(_email != NULL)
+	{
+		wcscpy(_d, L"&u=");
+		wcscpy(_d, _email);
+	}
+
+	// External IPv4 address
+	//if(_ip != NULL)
+	//{
+	//	wcscpy(_d, L"&ulp=");
+	//	wcscpy(_d, _ip);
+	//}
+
+	// Security Policy Key
+	if(_key != NULL)
+	{
+		wcscpy(_d, L"&l=");
+		wcscpy(_d, _key);
+	}
+
+	// One Time Pass key
+	//if(_otp != NULL)
+	//{
+	//	wcscpy(_d, L"&c=");
+	//	wcscpy(_d, _otp);
+	//}
+
+	// aPersona key -- { }
+	//if(_akey != NULL)
+	//{
+	//	wcscpy(_d, L"&a=");
+	//	wcscpy(_d, _akey);
+	//}
+	DWORD _data_len = wcslen(_d);
+
+	// Create an HTTP Request Handle -- I think output is a file to write to?
 	if(hConnect)
-		hRequest = WinHttpOpenRequest(hConnect, L"PUT", L"/writetest.txt", NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
+		hRequest = WinHttpOpenRequest(hConnect, L"POST", L"C:\\Temp\\http.txt", NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
 
 	// Send a request
 	if(hRequest)
-		bResults = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
-
+		bResults = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, (LPVOID)_d, _data_len, _data_len, 0);
+	else
+		return hr = GetLastError();
 	// ADDITIONAL CODE HERE
 
 	// Errors
 	if(!bResults)
-		printf("Error %d\n", GetLastError());
+		return hr = GetLastError();
+	else
+	{
+		bResults = WinHttpReceiveResponse(hRequest, NULL);
+		
+		if(bResults)
+		{
+			DWORD dwSize;
+			DWORD dwDownloaded = 0;
+			LPSTR pszOutBuffer;
+			do
+			{
+				dwSize = 0;
+				if(!WinHttpQueryDataAvailable(hRequest, &dwSize))
+					return hr = GetLastError();
+				pszOutBuffer = new char[dwSize+1];
+				if(!pszOutBuffer)
+				{
+					delete [] pszOutBuffer;
+					return hr = E_OUTOFMEMORY;
+				}
+				ZeroMemory(pszOutBuffer, dwSize+1);
+				if(!WinHttpReadData(hRequest, (LPVOID)pszOutBuffer, dwSize, &dwDownloaded))
+				{
+					delete [] pszOutBuffer;
+					return hr = GetLastError();
+				}
+				if(!dwDownloaded)
+					break;
+			}while(dwSize > 0);
+
+			OutputWrite((PWSTR)pszOutBuffer);
+			delete [] pszOutBuffer;
+		}
+		else
+		{
+			hr = GetLastError();
+		}
+	}
+	
 
 	// Close open handles
 	if(hRequest)WinHttpCloseHandle(hRequest);
 	if(hConnect)WinHttpCloseHandle(hConnect);
 	if(hSession)WinHttpCloseHandle(hSession);
 
-	return bResults;
+	return hr;
 }
 
 // Collect the username and password into a serialized credential for the correct usage scenario 
 // (logon/unlock is what's demonstrated in this sample).  LogonUI then passes these credentials 
 // back to the system to log on.
+/********************************************
+Authentication is performed when this function returns.  We have chosen to do all secondary factor authentication here
+
+STEPS
+- Disable local apersona Y/N?
+- Read in Registry Settings
+- Read in LDAP attributes
+- Build HTTP string
+- Send HTTP string
+- Deal with response
+*********************************************/
 HRESULT CSampleCredential::GetSerialization(
 	CREDENTIAL_PROVIDER_GET_SERIALIZATION_RESPONSE* pcpgsr,
 	CREDENTIAL_PROVIDER_CREDENTIAL_SERIALIZATION* pcpcs, 
@@ -1167,13 +1182,11 @@ HRESULT CSampleCredential::GetSerialization(
 	CREDENTIAL_PROVIDER_STATUS_ICON* pcpsiOptionalStatusIcon
 	)
 {
-	/***
-	
-	***/
 	UNREFERENCED_PARAMETER(ppwszOptionalStatusText);
 	UNREFERENCED_PARAMETER(pcpsiOptionalStatusIcon);
 
 	HRESULT hr;
+
 	// Local computer name
 	WCHAR wsz[MAX_COMPUTERNAME_LENGTH+1];
 	DWORD cch = ARRAYSIZE(wsz);
@@ -1185,18 +1198,24 @@ HRESULT CSampleCredential::GetSerialization(
 	// If we are to log in locally or on the network
 	BOOL _localLogin = true;
 
+	// DWORD value, if TRUE then skip aPersona authentication, default should be true
+	DWORD _bypassAPersona = 1;
+	HKEY _hk = OpenKey(HKEY_LOCAL_MACHINE, "Software\\aPersona\\aPersona local authentication only");
+	if(_hk == NULL)
+		goto local;//_bypassAPersona = 1;
+	else
+		_bypassAPersona = GetRegDwordVal(_hk, "use");
+	if(_bypassAPersona == NULL)
+		goto local;//_bypassAPersona = 1;
+
 	// Gets Domain membership information
 	DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
 	DWORD dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
-	if(info->MachineRole == DsRole_RoleMemberWorkstation)//DsRole_RoleStandaloneWorkstation)
-	{
-		OutputWrite(L"Domain joined");
-		_localLogin = false;
-	}
+	if(info->MachineRole == DsRole_RoleMemberWorkstation)//DsRole_RoleStandaloneWorkstation == WORKGROUP, DsRole_RoleMemberWorkstation == Domain
+		goto local;	
 	
-	if(_localLogin)
+local:
 	{
-		/*** BELOW should be used for when the machine is not connected to a domain and you wish to use local login like normal ***/	
 		if (GetComputerNameW(wsz, &cch))
 		{
 			OutputWrite(wsz);
@@ -1208,14 +1227,6 @@ HRESULT CSampleCredential::GetSerialization(
 			{
 				KERB_INTERACTIVE_UNLOCK_LOGON kiul;
 				/*
-				//////////////////////////////////////////////////////////////////////////
-				MINE
-				//////////////////////////////////////////////////////////////////////////
-				*/
-				/*
-				WriteSysInfo();
-				WriteADInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME]);
-
 				//get handle
 				HWND hwndOwner = NULL;
 
@@ -1233,13 +1244,8 @@ HRESULT CSampleCredential::GetSerialization(
 				//EnumerateUserInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME],hwndOwner,ppd);
 
 				*/
-				hr = S_OK;
-
-				/*
-				//////////////////////////////////////////////////////////////////////////
-					END MINE
-				//////////////////////////////////////////////////////////////////////////
-				*/
+				//hr = S_OK;
+				
 				// Initialize kiul with weak references to our credential.			
 				hr = KerbInteractiveUnlockLogonInit(wsz, _rgFieldStrings[SFI_USERNAME], pwzProtectedPassword, _cpus, &kiul);							
 				if (SUCCEEDED(hr))
@@ -1265,7 +1271,6 @@ HRESULT CSampleCredential::GetSerialization(
 						}
 					}
 				}
-
 				CoTaskMemFree(pwzProtectedPassword);
 			}
 		}
@@ -1275,49 +1280,108 @@ HRESULT CSampleCredential::GetSerialization(
 			hr = HRESULT_FROM_WIN32(dwErr);
 		}
 	}
-	else
+aPersona:
 	{
-		// Get MAC
-		char *mac = GetMacAddress();
-		// Hash MAC
-
-		// Get Attributes
-		// Combine into POST string
-		
-		// POST 
-		// Response
-		if(GetComputerNameExW(ComputerNameDnsDomain, wszDomain, &bufSize))
+		/*************
+		READ in Registry Settings
+		**************/
+		//aPersona RDP authentication -- use
+		//aPersona Adaptive Security Manager URL -- url
+		//aPersona Adaptive Security Policy Key -- key
+		HKEY _rk = NULL;
+		LPCTSTR _url = NULL, _key = NULL;
+		_rk = OpenKey(HKEY_LOCAL_MACHINE, "Software\\aPersona\\aPersona Adaptive Security Manager URL");
+		if(_rk == NULL)
 		{
-			// Use the flat NETBIOS name which is either DOMAIN or WORKGROUP
-			PWSTR splitDomain;
-		
-			if(info->DomainNameFlat != NULL)
-			{
-				splitDomain = info->DomainNameFlat;
-			}
-	
-			// Split user and keep the actual username and not the domain name
-			PWSTR splitUser = NULL;		
-			// By convention USERNAME can come in the following formats:
+			hr = E_INVALIDARG;
+			goto end;
+		}	
+		_url = GetRegDwordString(_rk, "url");
+		if(_url == NULL)
+		{
+			hr = E_INVALIDARG;
+			goto end;
+		}
+		_rk = OpenKey(HKEY_LOCAL_MACHINE, "Software\\aPersona\\aPersona Adaptive Security Policy Key");
+		if(_rk == NULL)
+		{
+			hr = E_INVALIDARG;
+			goto end; 			
+		}
+		_key = GetRegDwordString(_rk, "key");
+		if(_key == NULL)
+		{
+			hr = E_INVALIDARG;
+			goto end;
+		}		
+
+		// Get MAC + CPU + SALT + HASH
+		char *mac = GetMacAddress();
+		PWSTR _hash = NULL;
+				
+		// Get IADsUser handle to the users object in LDAP
+		IADsUser *user = getIADsUser(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME]);
+		if(user == NULL)
+		{
+			hr = E_INVALIDARG;
+			goto end;
+		}
+		// Get EMAIL
+		BSTR var;
+		PWSTR _email, _fName, _telephone;
+		user->get_EmailAddress(&var);
+		_email = var;
+
+		// Get Full Name
+		user->get_FullName(&var);
+		_fName = var;
+
+		// Get stripped Username
+		// By convention USERNAME can come in the following formats:
 			//	USERNAME
 			//	USERNAME@DOMAIN
 			//	DOMAIN\USERNAME
-			if( wcsrchr(_rgFieldStrings[SFI_USERNAME], L'\\') != NULL )
+		PWSTR splitUser = NULL, splitDomain = NULL;
+		if( wcsrchr(_rgFieldStrings[SFI_USERNAME], L'\\') != NULL )
+		{
+			splitUser = wcsrchr(_rgFieldStrings[SFI_USERNAME], L'\\') + 1;
+		}
+		else if( wcsrchr(_rgFieldStrings[SFI_USERNAME], L'\@') )
+		{
+			wchar_t* tok = wcstok(_rgFieldStrings[SFI_USERNAME], L"@");
+			splitUser = tok;
+		}
+		else
+			splitUser = _rgFieldStrings[SFI_USERNAME];
+
+		wchar_t c[80], b[80];
+		MultiByteToWideChar(CP_ACP, 0, _url, -1, c, 80);
+		MultiByteToWideChar(CP_ACP, 0, _key, -1, b, 80);
+
+		// Get Phone Number
+		VARIANT v;
+		user->get_TelephoneNumber(&v);
+		_telephone = v.bstrVal;
+		VariantClear(&v);
+
+		// Free up the IADsUser object
+		user->Release();
+
+		// Build HTTP Post
+		DWORD *_httpResult = NULL;
+		DWORD _flag = 0x0; // Initial login
+		// _flag = 0x1; // Resend
+		// _flag = 0x2; // Verify
+		hr = ConnectASMServer(c, b, _hash, _fName, _email, _telephone, splitUser, _httpResult, _flag);
+		
+		// Read Response
+				
+		if(GetComputerNameExW(ComputerNameDnsDomain, wszDomain, &bufSize))
+		{			
+			if(info->DomainNameFlat != NULL)
 			{
-				splitUser = wcsrchr(_rgFieldStrings[SFI_USERNAME], L'\\') + 1;
-			}
-			else if( wcsrchr(_rgFieldStrings[SFI_USERNAME], L'\@') )
-			{
-				//splitUser = wcsrchr(_rgFieldStrings[SFI_USERNAME], L'@') + 1;
-				wchar_t* tok = wcstok(_rgFieldStrings[SFI_USERNAME], L"@");
-				splitUser = tok;
-			}
-			else
-				splitUser = _rgFieldStrings[SFI_USERNAME];
-					
-			IADsUser *user = getIADsUser(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME]);
-			PWSTR d = buildPostString(splitUser, _rgFieldStrings[SFI_PASSWORD],0, 1);
-			OutputWrite(d);
+				splitDomain = info->DomainNameFlat;
+			}			
 			
 			PWSTR pwzProtectedPassword;
 
@@ -1326,15 +1390,11 @@ HRESULT CSampleCredential::GetSerialization(
 			if (SUCCEEDED(hr))
 			{
 				KERB_INTERACTIVE_UNLOCK_LOGON kiul;						
-				// Initialize kiul with weak references to our credential.			
-
+				
 				hr = KerbInteractiveUnlockLogonInit(splitDomain, splitUser, pwzProtectedPassword, _cpus, &kiul);
 			
 				if (SUCCEEDED(hr))
 				{
-					// We use KERB_INTERACTIVE_UNLOCK_LOGON in both unlock and logon scenarios.  It contains a
-					// KERB_INTERACTIVE_LOGON to hold the creds plus a LUID that is filled in for us by Winlogon
-					// as necessary.
 					hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);
 					
 					if (SUCCEEDED(hr))
@@ -1347,15 +1407,10 @@ HRESULT CSampleCredential::GetSerialization(
 							pcpcs->ulAuthenticationPackage = ulAuthPackage;
 							pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
 													
-							// At this point the credential has created the serialized credential used for logon
-							// By setting this to CPGSR_RETURN_CREDENTIAL_FINISHED we are letting logonUI know
-							// that we have all the information we need and it should attempt to submit the 
-							// serialized credential.
 							*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;
 						}
 					}
-				}
-	
+				}	
 				CoTaskMemFree(pwzProtectedPassword);
 			}			
 		}
@@ -1364,7 +1419,8 @@ HRESULT CSampleCredential::GetSerialization(
 			DWORD dwErr = GetLastError();
 			hr = HRESULT_FROM_WIN32(dwErr);
 		}
-	}
+	}	
+end:	
 	// Free up the memory from domain query
 	DsRoleFreeMemory(info);
 

@@ -1022,6 +1022,8 @@ PWSTR buildPostString(PWSTR u, PWSTR p, int type_flag, int otpm_flag)
 // Using WinHTTP make a connection to the ASM server and POST data
 HRESULT ConnectASMServer(PWSTR _url,PWSTR _key,PWSTR _hash,PWSTR _fName,PWSTR _email,PWSTR _telephone,PWSTR splitUser,DWORD *_httpResult, DWORD _flag)
 {
+	OutputWrite(L"Starting http stuff...\n");
+
 	// Return any errors with this unless http return codes from API are gotten then use those
 	HRESULT hr;
 
@@ -1282,6 +1284,7 @@ local:
 	}
 aPersona:
 	{
+		OutputWrite(L"Staring apersona..\n");
 		/*************
 		READ in Registry Settings
 		**************/
@@ -1294,25 +1297,33 @@ aPersona:
 		if(_rk == NULL)
 		{
 			hr = E_INVALIDARG;
-			goto end;
+			::MessageBox(NULL, "aPersona has failed to load registry settings.", "aPersona Error", 0);
+			//goto end;
+			goto local;
 		}	
 		_url = GetRegDwordString(_rk, "url");
 		if(_url == NULL)
 		{
 			hr = E_INVALIDARG;
-			goto end;
+			::MessageBox(NULL, "aPersona has failed to load the Security Manager URL", "aPersona Error", 0);
+			//goto end;
+			goto local;
 		}
 		_rk = OpenKey(HKEY_LOCAL_MACHINE, "Software\\aPersona\\aPersona Adaptive Security Policy Key");
 		if(_rk == NULL)
 		{
 			hr = E_INVALIDARG;
-			goto end; 			
+			::MessageBox(NULL, "aPersona has failed to load the Security Policy Key", "aPersona Error", 0);
+			//goto end;
+			goto local;			
 		}
 		_key = GetRegDwordString(_rk, "key");
 		if(_key == NULL)
 		{
 			hr = E_INVALIDARG;
-			goto end;
+			::MessageBox(NULL, "aPersona has failed to load the Security Policy Key", "aPersona Error", 0);
+			//goto end;
+			goto local;
 		}		
 
 		// Get MAC + CPU + SALT + HASH
@@ -1335,7 +1346,7 @@ aPersona:
 		// Get Full Name
 		user->get_FullName(&var);
 		_fName = var;
-
+		OutputWrite(L"Somewhere in the middle of apersona\n");
 		// Get stripped Username
 		// By convention USERNAME can come in the following formats:
 			//	USERNAME
@@ -1375,6 +1386,7 @@ aPersona:
 		hr = ConnectASMServer(c, b, _hash, _fName, _email, _telephone, splitUser, _httpResult, _flag);
 		
 		// Read Response
+		OutputWrite(L"Returned from http..\n");
 				
 		if(GetComputerNameExW(ComputerNameDnsDomain, wszDomain, &bufSize))
 		{			

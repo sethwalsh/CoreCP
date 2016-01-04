@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "aPersona", "aPersona\aPersona.vdproj", "{6667FA25-601C-45B8-BCC1-0BA59842D737}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CustomInstaller", "CustomInstaller\CustomInstaller.vcxproj", "{6614B27D-0199-42CB-838A-E668E8EDC06C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6667FA25-601C-45B8-BCC1-0BA59842D737}.Debug|Win32.ActiveCfg = Debug
+		{6667FA25-601C-45B8-BCC1-0BA59842D737}.Debug|Win32.Build.0 = Debug
+		{6667FA25-601C-45B8-BCC1-0BA59842D737}.Release|Win32.ActiveCfg = Release
+		{6667FA25-601C-45B8-BCC1-0BA59842D737}.Release|Win32.Build.0 = Release
+		{6614B27D-0199-42CB-838A-E668E8EDC06C}.Debug|Win32.ActiveCfg = Debug|Win32
+		{6614B27D-0199-42CB-838A-E668E8EDC06C}.Debug|Win32.Build.0 = Debug|Win32
+		{6614B27D-0199-42CB-838A-E668E8EDC06C}.Release|Win32.ActiveCfg = Release|Win32
+		{6614B27D-0199-42CB-838A-E668E8EDC06C}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

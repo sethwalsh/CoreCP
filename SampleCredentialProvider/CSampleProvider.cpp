@@ -104,7 +104,7 @@ HRESULT CSampleProvider::Filter(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus,DWORD dw
             //Filters out the default Windows provider (only for Logon and Unlock scenarios)
             for (int i = 0; i < (int)cProviders; i++)
             {
-                if (IsEqualGUID(rgclsidProviders[i], CLSID_PasswordCredentialProvider))
+                if (IsEqualGUID(rgclsidProviders[i], CLSID_CSampleProvider))//CLSID_PasswordCredentialProvider))
 					rgbAllow[i]=true;
                 else 
 					rgbAllow[i] = false;

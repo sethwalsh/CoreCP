@@ -15,11 +15,11 @@
 #include <unknwn.h>
 #include "CSampleCredential.h"
 #include "guid.h"
+#include <comdef.h>
 
 //#include <atlbase.h>
 #include <AdsHlp.h>
 #include <string>
-#include <comdef.h>
 
 //for user
 #include <Iads.h>
@@ -48,6 +48,53 @@
 #include "sha1.h"
 #include <time.h>
 
+void writeToLog(HRESULT hr)
+{
+	//TODO
+	// finish formatting and writting HRESULT codes to a standard logging file for production
+}
+
+void DebugWrite(_com_error e)
+{	
+	FILE* f;
+	f = _wfopen( L"C:\\Temp\\DEBUG.txt", L"a");
+	if(f != NULL){ 
+		fwrite(e.ErrorMessage(), sizeof(TCHAR), strlen(e.ErrorMessage()), f);
+		//fwrite( e.ErrorMessage(), sizeof(WCHAR), wcslen(e.ErrorMessage().c_str()), f);
+		fwrite( L"\n", sizeof(WCHAR), wcslen(L"\n"), f);
+		fwrite( L"----------\n", sizeof(WCHAR), wcslen(L"----------\n"), f);
+		fclose(f);
+	}
+}
+
+void OutputWrite(PWSTR s)
+{
+	FILE* f;
+	f = _wfopen( L"C:\\Temp\\G_out.txt", L"a");
+	if(f != NULL){ 
+		fwrite( s, sizeof(WCHAR), wcslen(s), f);
+		fwrite( L"\n", sizeof(WCHAR), wcslen(L"\n"), f);
+		fwrite( L"----------\n", sizeof(WCHAR), wcslen(L"----------\n"), f);
+		fclose(f);
+	}
+}
+
+PWSTR splitUsername(PWSTR u)
+{
+	PWSTR splitUser = NULL, splitDomain = NULL;
+	if( wcsrchr(u, L'\\') != NULL )
+	{
+		splitUser = wcsrchr(u, L'\\') + 1;
+	}
+	else if( wcsrchr(u, L'\@') )
+	{
+		wchar_t* tok = wcstok(u, L"@");
+		splitUser = tok;
+	}
+	else
+		splitUser = u;
+	return splitUser;
+}
 /*
 Gets MAC Address
 //TODO: http://stackoverflow.com/questions/13646621/how-to-get-mac-address-in-windows-with-c
@@ -225,43 +272,23 @@ OUTPUTS:
 *************************************************/
 LPCTSTR GetRegDwordString(HKEY hKey, LPCTSTR lpValue)
 {
-	LPCTSTR data;
-	DWORD size = lstrlen(data)*2;
+	//LPCTSTR data;
+	wchar_t data[4096];
+	DWORD size = 4096;//lstrlen(data)*2;
 	DWORD type = REG_SZ;
 
 	//get value of reg value
 	LONG nError = RegQueryValueEx(hKey, lpValue, NULL, &type, (LPBYTE)&data, &size);
-
-
+	
 	//TODO: What if error or value doesn't exist?
 	//if (err || err == ERROR_FILE_NOT_FOUND)
 	//{}
 	if(nError == ERROR_SUCCESS)
-		return data;
+		return (LPCTSTR)data;
 	else
+	{
+		DebugWrite(_com_error(nError));
 		return NULL;
-}
-void DebugWrite(_com_error e)
-{	
-	FILE* f;
-	f = _wfopen( L"C:\\Temp\\DEBUG.txt", L"a");
-	if(f != NULL){ 
-		fwrite(e.ErrorMessage(), sizeof(TCHAR), strlen(e.ErrorMessage()), f);
-		//fwrite( e.ErrorMessage(), sizeof(WCHAR), wcslen(e.ErrorMessage().c_str()), f);
-		fwrite( L"\n", sizeof(WCHAR), wcslen(L"\n"), f);
-		fwrite( L"----------\n", sizeof(WCHAR), wcslen(L"----------\n"), f);
-		fclose(f);
-	}
-}
-void OutputWrite(PWSTR s)
-{
-	FILE* f;
-	f = _wfopen( L"C:\\Temp\\G_out.txt", L"a");
-	if(f != NULL){ 
-		fwrite( s, sizeof(WCHAR), wcslen(s), f);
-		fwrite( L"\n", sizeof(WCHAR), wcslen(L"\n"), f);
-		fwrite( L"----------\n", sizeof(WCHAR), wcslen(L"----------\n"), f);
-		fclose(f);
 	}
 }
 
@@ -433,6 +460,10 @@ HRESULT CSampleCredential::SetDeselected()
 		if (SUCCEEDED(hr) && _pCredProvCredentialEvents)
 		{
 			_pCredProvCredentialEvents->SetFieldString(this, SFI_PASSWORD, _rgFieldStrings[SFI_PASSWORD]);
+			
+			// Clear username
+			hr = SHStrDupW(L"", &_rgFieldStrings[SFI_USERNAME]);
+			_pCredProvCredentialEvents->SetFieldString(this, SFI_USERNAME, _rgFieldStrings[SFI_USERNAME]);
 		}
 	}
 
@@ -1202,24 +1233,23 @@ HRESULT CSampleCredential::GetSerialization(
 
 	// DWORD value, if TRUE then skip aPersona authentication, default should be true
 	DWORD _bypassAPersona = 1;
-	HKEY _hk = OpenKey(HKEY_LOCAL_MACHINE, "Software\\aPersona\\aPersona local authentication only");
+	HKEY _hk = OpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\aPersona\\aPersona local authentication only");
 	if(_hk == NULL)
-		goto local;//_bypassAPersona = 1;
+		_bypassAPersona = 1;
 	else
 		_bypassAPersona = GetRegDwordVal(_hk, "use");
 	if(_bypassAPersona == NULL)
-		goto local;//_bypassAPersona = 1;
+		_bypassAPersona = 1;
 
 	// Gets Domain membership information
 	DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
 	DWORD dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
-	if(info->MachineRole == DsRole_RoleMemberWorkstation)//DsRole_RoleStandaloneWorkstation == WORKGROUP, DsRole_RoleMemberWorkstation == Domain
-		goto local;	
-	
-local:
+	if(info->MachineRole == DsRole_RoleMemberWorkstation)//DsRole_RoleStandaloneWorkstation == WORKGROUP, DsRole_RoleMemberWorkstation == Domain				
 	{
+		OutputWrite(L"LOCAL");
 		if (GetComputerNameW(wsz, &cch))
 		{
+			OutputWrite(L"About to write computers name..");
 			OutputWrite(wsz);
 			PWSTR pwzProtectedPassword;
 
@@ -1249,7 +1279,9 @@ local:
 				//hr = S_OK;
 				
 				// Initialize kiul with weak references to our credential.			
-				hr = KerbInteractiveUnlockLogonInit(wsz, _rgFieldStrings[SFI_USERNAME], pwzProtectedPassword, _cpus, &kiul);							
+				hr = KerbInteractiveUnlockLogonInit(wsz, splitUsername( _rgFieldStrings[SFI_USERNAME] ), pwzProtectedPassword, _cpus, &kiul);	
+				OutputWrite(L"About to write the local username..");
+				OutputWrite( splitUsername(_rgFieldStrings[SFI_USERNAME]) );
 				if (SUCCEEDED(hr))
 				{
 					// We use KERB_INTERACTIVE_UNLOCK_LOGON in both unlock and logon scenarios.  It contains a
@@ -1270,19 +1302,38 @@ local:
 							// that we have all the information we need and it should attempt to submit the 
 							// serialized credential.
 							*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;
+							//goto end;
+							// Free up the memory from domain query
+							DsRoleFreeMemory(info);
+
+							// return result
+							return hr;
 						}
 					}
 				}
 				CoTaskMemFree(pwzProtectedPassword);
+				//goto end;
+				// Free up the memory from domain query
+				DsRoleFreeMemory(info);
+
+				// return result
+				return hr;
 			}
 		}
 		else
 		{
 			DWORD dwErr = GetLastError();
 			hr = HRESULT_FROM_WIN32(dwErr);
+			//goto end;
+
+			// Free up the memory from domain query
+			DsRoleFreeMemory(info);
+
+			// return result
+			return hr;
 		}
 	}
-aPersona:
+	else
 	{
 		OutputWrite(L"Staring apersona..\n");
 		/*************
@@ -1293,13 +1344,13 @@ aPersona:
 		//aPersona Adaptive Security Policy Key -- key
 		HKEY _rk = NULL;
 		LPCTSTR _url = NULL, _key = NULL;
-		_rk = OpenKey(HKEY_LOCAL_MACHINE, "Software\\aPersona\\aPersona Adaptive Security Manager URL");
+		_rk = OpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\aPersona\\aPersona Adaptive Security Manager URL");
 		if(_rk == NULL)
 		{
 			hr = E_INVALIDARG;
 			::MessageBox(NULL, "aPersona has failed to load registry settings.", "aPersona Error", 0);
 			//goto end;
-			goto local;
+	//		goto local;
 		}	
 		_url = GetRegDwordString(_rk, "url");
 		if(_url == NULL)
@@ -1307,15 +1358,15 @@ aPersona:
 			hr = E_INVALIDARG;
 			::MessageBox(NULL, "aPersona has failed to load the Security Manager URL", "aPersona Error", 0);
 			//goto end;
-			goto local;
+	//		goto local;
 		}
-		_rk = OpenKey(HKEY_LOCAL_MACHINE, "Software\\aPersona\\aPersona Adaptive Security Policy Key");
+		_rk = OpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\aPersona\\aPersona Adaptive Security Policy Key");
 		if(_rk == NULL)
 		{
 			hr = E_INVALIDARG;
 			::MessageBox(NULL, "aPersona has failed to load the Security Policy Key", "aPersona Error", 0);
 			//goto end;
-			goto local;			
+	//		goto local;			
 		}
 		_key = GetRegDwordString(_rk, "key");
 		if(_key == NULL)
@@ -1323,19 +1374,27 @@ aPersona:
 			hr = E_INVALIDARG;
 			::MessageBox(NULL, "aPersona has failed to load the Security Policy Key", "aPersona Error", 0);
 			//goto end;
-			goto local;
+	//		goto local;
 		}		
 
 		// Get MAC + CPU + SALT + HASH
 		char *mac = GetMacAddress();
 		PWSTR _hash = NULL;
 				
+		// Get stripped Username
+		// By convention USERNAME can come in the following formats:
+			//	USERNAME
+			//	USERNAME@DOMAIN
+			//	DOMAIN\USERNAME
+		PWSTR splitUser = splitUsername(_rgFieldStrings[SFI_USERNAME]);
+		PWSTR splitDomain = NULL;
+		
 		// Get IADsUser handle to the users object in LDAP
-		IADsUser *user = getIADsUser(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME]);
+		IADsUser *user = getIADsUser(_rgFieldStrings[SFI_PASSWORD], splitUser);
 		if(user == NULL)
 		{
 			hr = E_INVALIDARG;
-			goto end;
+			return hr;
 		}
 		// Get EMAIL
 		BSTR var;
@@ -1347,23 +1406,6 @@ aPersona:
 		user->get_FullName(&var);
 		_fName = var;
 		OutputWrite(L"Somewhere in the middle of apersona\n");
-		// Get stripped Username
-		// By convention USERNAME can come in the following formats:
-			//	USERNAME
-			//	USERNAME@DOMAIN
-			//	DOMAIN\USERNAME
-		PWSTR splitUser = NULL, splitDomain = NULL;
-		if( wcsrchr(_rgFieldStrings[SFI_USERNAME], L'\\') != NULL )
-		{
-			splitUser = wcsrchr(_rgFieldStrings[SFI_USERNAME], L'\\') + 1;
-		}
-		else if( wcsrchr(_rgFieldStrings[SFI_USERNAME], L'\@') )
-		{
-			wchar_t* tok = wcstok(_rgFieldStrings[SFI_USERNAME], L"@");
-			splitUser = tok;
-		}
-		else
-			splitUser = _rgFieldStrings[SFI_USERNAME];
 
 		wchar_t c[80], b[80];
 		MultiByteToWideChar(CP_ACP, 0, _url, -1, c, 80);
@@ -1376,7 +1418,7 @@ aPersona:
 		VariantClear(&v);
 
 		// Free up the IADsUser object
-		user->Release();
+		//user->Release();
 
 		// Build HTTP Post
 		DWORD *_httpResult = NULL;
@@ -1385,20 +1427,25 @@ aPersona:
 		// _flag = 0x2; // Verify
 		hr = ConnectASMServer(c, b, _hash, _fName, _email, _telephone, splitUser, _httpResult, _flag);
 		
+		// Free up the IADsUser object
+		user->Release();
+		
 		// Read Response
 		OutputWrite(L"Returned from http..\n");
 				
 		if(GetComputerNameExW(ComputerNameDnsDomain, wszDomain, &bufSize))
-		{			
+		{	
+			//OutputWrite(L"Here1");
+			dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
 			if(info->DomainNameFlat != NULL)
 			{
 				splitDomain = info->DomainNameFlat;
 			}			
-			
+			//OutputWrite(L"Here2");
 			PWSTR pwzProtectedPassword;
 
 			hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
-
+			//OutputWrite(L"Here");
 			if (SUCCEEDED(hr))
 			{
 				KERB_INTERACTIVE_UNLOCK_LOGON kiul;						
@@ -1421,18 +1468,26 @@ aPersona:
 													
 							*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;
 						}
+						else
+							{DebugWrite(_com_error(hr));OutputWrite(L"1");}
 					}
+					else
+						{DebugWrite(_com_error(hr));OutputWrite(L"2");}
 				}	
-				CoTaskMemFree(pwzProtectedPassword);
+				else
+				{DebugWrite(_com_error(hr));
+				CoTaskMemFree(pwzProtectedPassword);OutputWrite(L"3");}
 			}			
+			else
+			{DebugWrite(_com_error(hr));OutputWrite(L"4");}
 		}
 		else
 		{
+			OutputWrite(L"5");
 			DWORD dwErr = GetLastError();
 			hr = HRESULT_FROM_WIN32(dwErr);
 		}
-	}	
-end:	
+	}		
 	// Free up the memory from domain query
 	DsRoleFreeMemory(info);
 
@@ -1495,6 +1550,7 @@ HRESULT CSampleCredential::ReportResult(
 		if (_pCredProvCredentialEvents)
 		{
 			_pCredProvCredentialEvents->SetFieldString(this, SFI_PASSWORD, L"");
+			_pCredProvCredentialEvents->SetFieldString(this, SFI_USERNAME, L"");
 		}
 	}
 

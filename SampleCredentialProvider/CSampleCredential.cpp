@@ -79,6 +79,29 @@ void OutputWrite(PWSTR s)
 	}
 }
 
+/*
+	Checks to see if the string argument (user chosen domain) is the local machine name.  If so then the
+	user has requested to authenticate locally and returns TRUE.
+*/
+bool isLocal(PWSTR d)
+{
+	WCHAR local[MAX_COMPUTERNAME_LENGTH+1];
+	DWORD cch = ARRAYSIZE(local);
+	GetComputerNameW(local, &cch);	
+	OutputWrite(local);
+	OutputWrite(d);
+
+	if(d == NULL)
+		return false;	
+	if(wcslen(d) == 0)
+	{
+		OutputWrite(L"zero");
+		return true;
+	}
+	if(wcscmp(d, local) == 0)
+		return true;
+	return false;
+}
 PWSTR splitUsername(PWSTR u)
 {
 	PWSTR splitUser = NULL, splitDomain = NULL;
@@ -1193,7 +1216,101 @@ HRESULT ConnectASMServer(PWSTR _url,PWSTR _key,PWSTR _hash,PWSTR _fName,PWSTR _e
 
 	return hr;
 }
+HRESULT funcHandle(PWSTR u, PWSTR p)
+{
+	HRESULT hr;
 
+	/*************
+		READ in Registry Settings
+		**************/
+		//aPersona RDP authentication -- use
+		//aPersona Adaptive Security Manager URL -- url
+		//aPersona Adaptive Security Policy Key -- key
+	HKEY _rk = NULL;
+	LPCTSTR _url = NULL, _key = NULL;
+	_rk = OpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\aPersona\\aPersona Adaptive Security Manager URL");
+	if(_rk == NULL)
+	{
+		hr = E_INVALIDARG;
+		::MessageBox(NULL, "aPersona has failed to load registry settings.", "aPersona Error", 0);			
+	}	
+	_url = GetRegDwordString(_rk, "url");
+	if(_url == NULL)
+	{
+		hr = E_INVALIDARG;
+		::MessageBox(NULL, "aPersona has failed to load the Security Manager URL", "aPersona Error", 0);			
+	}
+	_rk = OpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\aPersona\\aPersona Adaptive Security Policy Key");
+	if(_rk == NULL)
+	{
+		hr = E_INVALIDARG;
+		::MessageBox(NULL, "aPersona has failed to load the Security Policy Key", "aPersona Error", 0);					
+	}
+	_key = GetRegDwordString(_rk, "key");
+	if(_key == NULL)
+	{
+		hr = E_INVALIDARG;
+		::MessageBox(NULL, "aPersona has failed to load the Security Policy Key", "aPersona Error", 0);			
+	}		
+	
+	// Get MAC + CPU + SALT + HASH
+	char *mac = GetMacAddress();
+	PWSTR _hash = NULL;
+				
+	// Get stripped Username
+	// By convention USERNAME can come in the following formats:
+		//	USERNAME
+		//	USERNAME@DOMAIN
+		//	DOMAIN\USERNAME
+	PWSTR splitUser = u;//splitUsername(_rgFieldStrings[SFI_USERNAME]);
+	PWSTR splitDomain = NULL;
+		
+	// Get IADsUser handle to the users object in LDAP
+	IADsUser *user = getIADsUser(p, splitUser);//getIADsUser(_rgFieldStrings[SFI_PASSWORD], splitUser);
+	if(user == NULL)
+	{
+		hr = E_INVALIDARG;
+		return hr;
+	}
+	// Get EMAIL
+	BSTR var;
+	PWSTR _email, _fName, _telephone;
+	user->get_EmailAddress(&var);
+	_email = var;
+
+	// Get Full Name
+	user->get_FullName(&var);
+	_fName = var;
+	OutputWrite(L"Somewhere in the middle of apersona\n");
+
+	wchar_t c[80], b[80];
+	MultiByteToWideChar(CP_ACP, 0, _url, -1, c, 80);
+	MultiByteToWideChar(CP_ACP, 0, _key, -1, b, 80);
+
+	// Get Phone Number
+	VARIANT v;
+	user->get_TelephoneNumber(&v);
+	_telephone = v.bstrVal;
+	VariantClear(&v);
+
+	// Free up the IADsUser object
+	//user->Release();
+
+	// Build HTTP Post
+	DWORD *_httpResult = NULL;
+	DWORD _flag = 0x0; // Initial login
+	// _flag = 0x1; // Resend
+	// _flag = 0x2; // Verify
+	hr = ConnectASMServer(c, b, _hash, _fName, _email, _telephone, splitUser, _httpResult, _flag);
+		
+	// Free up the IADsUser object
+	user->Release();
+		
+	// Read Response
+	OutputWrite(L"Returned from http..\n");
+
+	return hr;
+}
 // Collect the username and password into a serialized credential for the correct usage scenario 
 // (logon/unlock is what's demonstrated in this sample).  LogonUI then passes these credentials 
 // back to the system to log on.
@@ -1240,24 +1357,30 @@ HRESULT CSampleCredential::GetSerialization(
 		_bypassAPersona = GetRegDwordVal(_hk, "use");
 	if(_bypassAPersona == NULL)
 		_bypassAPersona = 1;
-
-	// Gets Domain membership information
-	DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
-	DWORD dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
-	if(info->MachineRole == DsRole_RoleMemberWorkstation)//DsRole_RoleStandaloneWorkstation == WORKGROUP, DsRole_RoleMemberWorkstation == Domain				
+	
+	/***
+	 FLOW
+	 -		aPersona				not apersona
+	 -local		-domain			local		domain
+	 ***/
+	_bypassAPersona = true;
+	// SKIP APERSONA
+	if(_bypassAPersona)
 	{
-		OutputWrite(L"LOCAL");
-		if (GetComputerNameW(wsz, &cch))
+		OutputWrite(L"NO APERSONA");
+		// Local -- if either no network OR user requested domain is LOCALHOST
+		if( isLocal(_pDomainName) )
 		{
-			OutputWrite(L"About to write computers name..");
-			OutputWrite(wsz);
-			PWSTR pwzProtectedPassword;
-
-			hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
-
-			if (SUCCEEDED(hr))
+			OutputWrite(L"Local NO APERSONA");
+			if (GetComputerNameW(wsz, &cch))
 			{
-				KERB_INTERACTIVE_UNLOCK_LOGON kiul;
+				PWSTR pwzProtectedPassword;
+
+				hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
+
+				if (SUCCEEDED(hr))
+				{
+					KERB_INTERACTIVE_UNLOCK_LOGON kiul;
 				/*
 				//get handle
 				HWND hwndOwner = NULL;
@@ -1278,219 +1401,241 @@ HRESULT CSampleCredential::GetSerialization(
 				*/
 				//hr = S_OK;
 				
-				// Initialize kiul with weak references to our credential.			
-				hr = KerbInteractiveUnlockLogonInit(wsz, splitUsername( _rgFieldStrings[SFI_USERNAME] ), pwzProtectedPassword, _cpus, &kiul);	
-				OutputWrite(L"About to write the local username..");
-				OutputWrite( splitUsername(_rgFieldStrings[SFI_USERNAME]) );
-				if (SUCCEEDED(hr))
-				{
-					// We use KERB_INTERACTIVE_UNLOCK_LOGON in both unlock and logon scenarios.  It contains a
-					// KERB_INTERACTIVE_LOGON to hold the creds plus a LUID that is filled in for us by Winlogon
-					// as necessary.
-					hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);					
+					// Initialize kiul with weak references to our credential.			
+					hr = KerbInteractiveUnlockLogonInit(wsz, splitUsername( _rgFieldStrings[SFI_USERNAME] ), pwzProtectedPassword, _cpus, &kiul);	
 					if (SUCCEEDED(hr))
 					{
-						ULONG ulAuthPackage;
-						hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);						
+						// We use KERB_INTERACTIVE_UNLOCK_LOGON in both unlock and logon scenarios.  It contains a
+						// KERB_INTERACTIVE_LOGON to hold the creds plus a LUID that is filled in for us by Winlogon
+						// as necessary.
+						hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);					
 						if (SUCCEEDED(hr))
 						{
-							pcpcs->ulAuthenticationPackage = ulAuthPackage;
-							pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
+							ULONG ulAuthPackage;
+							hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);						
+							if (SUCCEEDED(hr))
+							{
+								pcpcs->ulAuthenticationPackage = ulAuthPackage;
+								pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
 													
-							// At this point the credential has created the serialized credential used for logon
-							// By setting this to CPGSR_RETURN_CREDENTIAL_FINISHED we are letting logonUI know
-							// that we have all the information we need and it should attempt to submit the 
-							// serialized credential.
-							*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;
-							//goto end;
-							// Free up the memory from domain query
-							DsRoleFreeMemory(info);
-
-							// return result
-							return hr;
+								// At this point the credential has created the serialized credential used for logon
+								// By setting this to CPGSR_RETURN_CREDENTIAL_FINISHED we are letting logonUI know
+								// that we have all the information we need and it should attempt to submit the 
+								// serialized credential.
+								*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;								
+							}
 						}
 					}
+					CoTaskMemFree(pwzProtectedPassword);				
 				}
-				CoTaskMemFree(pwzProtectedPassword);
-				//goto end;
-				// Free up the memory from domain query
-				DsRoleFreeMemory(info);
-
-				// return result
-				return hr;
+			}
+			else
+			{
+				DWORD dwErr = GetLastError();
+				hr = HRESULT_FROM_WIN32(dwErr);			
 			}
 		}
+		// Domain -- if network AND user has not requested LOCALHOST
 		else
 		{
-			DWORD dwErr = GetLastError();
-			hr = HRESULT_FROM_WIN32(dwErr);
-			//goto end;
+			OutputWrite(L"Domain NO APERSONA");
+			if(GetComputerNameExW(ComputerNameDnsDomain, wszDomain, &bufSize))
+			{
+				DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
+				DWORD dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
+				dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
+				PWSTR splitDomain = NULL;
+				if(info->DomainNameFlat != NULL)
+				{
+					splitDomain = info->DomainNameFlat;
+				}			
+				
+				// Free up the memory from domain query
+				DsRoleFreeMemory(info);
+				
+				PWSTR pwzProtectedPassword;
 
-			// Free up the memory from domain query
-			DsRoleFreeMemory(info);
-
-			// return result
-			return hr;
+				hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);			
+				if (SUCCEEDED(hr))
+				{
+					KERB_INTERACTIVE_UNLOCK_LOGON kiul;						
+					
+					PWSTR splitUser = splitUsername(_rgFieldStrings[SFI_USERNAME]);
+					hr = KerbInteractiveUnlockLogonInit(splitDomain, splitUser, pwzProtectedPassword, _cpus, &kiul);
+			
+					if (SUCCEEDED(hr))
+					{
+						hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);
+					
+						if (SUCCEEDED(hr))
+						{
+							ULONG ulAuthPackage;
+							hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);
+						
+							if (SUCCEEDED(hr))
+							{
+								pcpcs->ulAuthenticationPackage = ulAuthPackage;
+								pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
+													
+								*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;
+							}						
+						}					
+					}					
+					CoTaskMemFree(pwzProtectedPassword);
+				}						
+			}
+			else
+			{
+				DWORD dwErr = GetLastError();
+				hr = HRESULT_FROM_WIN32(dwErr);
+			}
 		}
 	}
 	else
 	{
-		OutputWrite(L"Staring apersona..\n");
-		/*************
-		READ in Registry Settings
-		**************/
-		//aPersona RDP authentication -- use
-		//aPersona Adaptive Security Manager URL -- url
-		//aPersona Adaptive Security Policy Key -- key
-		HKEY _rk = NULL;
-		LPCTSTR _url = NULL, _key = NULL;
-		_rk = OpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\aPersona\\aPersona Adaptive Security Manager URL");
-		if(_rk == NULL)
-		{
-			hr = E_INVALIDARG;
-			::MessageBox(NULL, "aPersona has failed to load registry settings.", "aPersona Error", 0);
-			//goto end;
-	//		goto local;
-		}	
-		_url = GetRegDwordString(_rk, "url");
-		if(_url == NULL)
-		{
-			hr = E_INVALIDARG;
-			::MessageBox(NULL, "aPersona has failed to load the Security Manager URL", "aPersona Error", 0);
-			//goto end;
-	//		goto local;
-		}
-		_rk = OpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\aPersona\\aPersona Adaptive Security Policy Key");
-		if(_rk == NULL)
-		{
-			hr = E_INVALIDARG;
-			::MessageBox(NULL, "aPersona has failed to load the Security Policy Key", "aPersona Error", 0);
-			//goto end;
-	//		goto local;			
-		}
-		_key = GetRegDwordString(_rk, "key");
-		if(_key == NULL)
-		{
-			hr = E_INVALIDARG;
-			::MessageBox(NULL, "aPersona has failed to load the Security Policy Key", "aPersona Error", 0);
-			//goto end;
-	//		goto local;
-		}		
-
-		// Get MAC + CPU + SALT + HASH
-		char *mac = GetMacAddress();
-		PWSTR _hash = NULL;
-				
-		// Get stripped Username
-		// By convention USERNAME can come in the following formats:
-			//	USERNAME
-			//	USERNAME@DOMAIN
-			//	DOMAIN\USERNAME
-		PWSTR splitUser = splitUsername(_rgFieldStrings[SFI_USERNAME]);
-		PWSTR splitDomain = NULL;
-		
-		// Get IADsUser handle to the users object in LDAP
-		IADsUser *user = getIADsUser(_rgFieldStrings[SFI_PASSWORD], splitUser);
-		if(user == NULL)
-		{
-			hr = E_INVALIDARG;
-			return hr;
-		}
-		// Get EMAIL
-		BSTR var;
-		PWSTR _email, _fName, _telephone;
-		user->get_EmailAddress(&var);
-		_email = var;
-
-		// Get Full Name
-		user->get_FullName(&var);
-		_fName = var;
-		OutputWrite(L"Somewhere in the middle of apersona\n");
-
-		wchar_t c[80], b[80];
-		MultiByteToWideChar(CP_ACP, 0, _url, -1, c, 80);
-		MultiByteToWideChar(CP_ACP, 0, _key, -1, b, 80);
-
-		// Get Phone Number
-		VARIANT v;
-		user->get_TelephoneNumber(&v);
-		_telephone = v.bstrVal;
-		VariantClear(&v);
-
-		// Free up the IADsUser object
-		//user->Release();
-
-		// Build HTTP Post
-		DWORD *_httpResult = NULL;
-		DWORD _flag = 0x0; // Initial login
-		// _flag = 0x1; // Resend
-		// _flag = 0x2; // Verify
-		hr = ConnectASMServer(c, b, _hash, _fName, _email, _telephone, splitUser, _httpResult, _flag);
-		
-		// Free up the IADsUser object
-		user->Release();
-		
-		// Read Response
-		OutputWrite(L"Returned from http..\n");
-				
-		if(GetComputerNameExW(ComputerNameDnsDomain, wszDomain, &bufSize))
+		OutputWrite(L"YES APERSONA");
+		// Local -- if either no network OR user requested domain is LOCALHOST
+		if( isLocal(_pDomainName) )
 		{	
-			//OutputWrite(L"Here1");
-			dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
-			if(info->DomainNameFlat != NULL)
+			HRESULT hr = funcHandle(_rgFieldStrings[SFI_USERNAME],_rgFieldStrings[SFI_PASSWORD]);
+			if(SUCCEEDED(hr))
 			{
-				splitDomain = info->DomainNameFlat;
-			}			
-			//OutputWrite(L"Here2");
-			PWSTR pwzProtectedPassword;
-
-			hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
-			//OutputWrite(L"Here");
-			if (SUCCEEDED(hr))
-			{
-				KERB_INTERACTIVE_UNLOCK_LOGON kiul;						
-				
-				hr = KerbInteractiveUnlockLogonInit(splitDomain, splitUser, pwzProtectedPassword, _cpus, &kiul);
-			
-				if (SUCCEEDED(hr))
+				// aPersona passed, so authenticate locally
+				if (GetComputerNameW(wsz, &cch))
 				{
-					hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);
-					
+					PWSTR pwzProtectedPassword;
+
+					hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
+
 					if (SUCCEEDED(hr))
 					{
-						ULONG ulAuthPackage;
-						hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);
-						
+						KERB_INTERACTIVE_UNLOCK_LOGON kiul;
+				/*
+				//get handle
+				HWND hwndOwner = NULL;
+
+				if (_pCredProvCredentialEvents)
+				{
+					_pCredProvCredentialEvents->OnCreatingWindow(&hwndOwner);
+				}
+
+				//initialize Progress Dialog
+				IProgressDialog * ppd;
+				CoCreateInstance(CLSID_ProgressDialog, NULL, CLSCTX_INPROC_SERVER, 
+					IID_IProgressDialog, (void **)&ppd);
+
+				//calls function to get data about the user
+				//EnumerateUserInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME],hwndOwner,ppd);
+
+				*/
+				//hr = S_OK;
+				
+					// Initialize kiul with weak references to our credential.			
+						hr = KerbInteractiveUnlockLogonInit(wsz, splitUsername( _rgFieldStrings[SFI_USERNAME] ), pwzProtectedPassword, _cpus, &kiul);	
 						if (SUCCEEDED(hr))
 						{
-							pcpcs->ulAuthenticationPackage = ulAuthPackage;
-							pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
-													
-							*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;
+							// We use KERB_INTERACTIVE_UNLOCK_LOGON in both unlock and logon scenarios.  It contains a
+							// KERB_INTERACTIVE_LOGON to hold the creds plus a LUID that is filled in for us by Winlogon
+							// as necessary.
+							hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);					
+							if (SUCCEEDED(hr))
+							{
+								ULONG ulAuthPackage;
+								hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);						
+								if (SUCCEEDED(hr))
+								{
+									pcpcs->ulAuthenticationPackage = ulAuthPackage;
+									pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
+														
+									// At this point the credential has created the serialized credential used for logon
+									// By setting this to CPGSR_RETURN_CREDENTIAL_FINISHED we are letting logonUI know
+									// that we have all the information we need and it should attempt to submit the 
+									// serialized credential.
+									*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;								
+								}
+							}
 						}
-						else
-							{DebugWrite(_com_error(hr));OutputWrite(L"1");}
+						CoTaskMemFree(pwzProtectedPassword);				
 					}
-					else
-						{DebugWrite(_com_error(hr));OutputWrite(L"2");}
-				}	
+				}
 				else
-				{DebugWrite(_com_error(hr));
-				CoTaskMemFree(pwzProtectedPassword);OutputWrite(L"3");}
-			}			
+				{
+					DWORD dwErr = GetLastError();
+					hr = HRESULT_FROM_WIN32(dwErr);			
+				}
+			}
 			else
-			{DebugWrite(_com_error(hr));OutputWrite(L"4");}
+			{
+				// TODO::: 
+				// deal with aPersona authentication failures here?
+			}
 		}
+		// Domain -- if network AND user has not requested LOCALHOST
 		else
 		{
-			OutputWrite(L"5");
-			DWORD dwErr = GetLastError();
-			hr = HRESULT_FROM_WIN32(dwErr);
+			HRESULT hr = funcHandle(_rgFieldStrings[SFI_USERNAME],_rgFieldStrings[SFI_PASSWORD]);
+			if(SUCCEEDED(hr))
+			{
+				// aPersona passed, so authenticate against the chosen domain (or default)
+				if(GetComputerNameExW(ComputerNameDnsDomain, wszDomain, &bufSize))
+				{
+					DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
+					DWORD dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
+					dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
+					PWSTR splitDomain = NULL;
+					if(info->DomainNameFlat != NULL)
+					{
+						splitDomain = info->DomainNameFlat;
+					}			
+					
+					// Free up the memory from domain query
+					DsRoleFreeMemory(info);
+					
+					PWSTR pwzProtectedPassword;
+	
+					hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);			
+					if (SUCCEEDED(hr))
+					{
+						KERB_INTERACTIVE_UNLOCK_LOGON kiul;						
+						
+						PWSTR splitUser = splitUsername(_rgFieldStrings[SFI_USERNAME]);
+						hr = KerbInteractiveUnlockLogonInit(splitDomain, splitUser, pwzProtectedPassword, _cpus, &kiul);
+				
+						if (SUCCEEDED(hr))
+						{
+							hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);
+						
+							if (SUCCEEDED(hr))
+							{
+								ULONG ulAuthPackage;
+								hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);
+							
+								if (SUCCEEDED(hr))
+								{
+									pcpcs->ulAuthenticationPackage = ulAuthPackage;
+									pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
+														
+									*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;
+								}						
+							}					
+						}					
+						CoTaskMemFree(pwzProtectedPassword);
+					}						
+				}
+				else
+				{
+					DWORD dwErr = GetLastError();
+					hr = HRESULT_FROM_WIN32(dwErr);
+				}
+			}
+			else
+			{
+				// TODO::: 
+				// deal with aPersona authentication failures here?
+			}
 		}
 	}		
-	// Free up the memory from domain query
-	DsRoleFreeMemory(info);
-
+		
 	// return result
 	return hr;
 }

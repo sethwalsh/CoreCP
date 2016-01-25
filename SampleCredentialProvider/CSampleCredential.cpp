@@ -12,10 +12,14 @@
 #include <ntstatus.h>
 #define WIN32_NO_STATUS
 #endif
+
 #include <unknwn.h>
 #include "CSampleCredential.h"
 #include "guid.h"
 #include <comdef.h>
+
+// For HTTP response
+#include <vector>
 
 //#include <atlbase.h>
 #include <AdsHlp.h>
@@ -52,6 +56,34 @@ void writeToLog(HRESULT hr)
 {
 	//TODO
 	// finish formatting and writting HRESULT codes to a standard logging file for production
+}
+
+std::vector<std::string> split_string(LPSTR pszOutBuffer, std::string delim)
+{
+	std::vector<std::string> _s;
+	//std::string s(pszOutBuffer);
+	char *pch = strtok(pszOutBuffer, delim.c_str());
+	if(pch != NULL)
+		_s.push_back(pch);
+	while(pch != NULL)
+	{
+		pch = strtok(NULL, delim.c_str());
+		if(pch != NULL)
+			_s.push_back(pch);
+	}
+	return _s;
+}
+
+std::string ws2s(const std::wstring& s)
+{
+    int len;
+    int slength = (int)s.length() + 1;
+    len = WideCharToMultiByte(CP_ACP, 0, s.c_str(), slength, 0, 0, 0, 0); 
+    char* buf = new char[len];
+    WideCharToMultiByte(CP_ACP, 0, s.c_str(), slength, buf, len, 0, 0); 
+    std::string r(buf);
+    delete[] buf;
+    return r;
 }
 
 void DebugWrite(_com_error e)
@@ -95,7 +127,7 @@ bool isLocal(PWSTR d)
 		return false;	
 	if(wcslen(d) == 0)
 	{
-		OutputWrite(L"zero");
+		//OutputWrite(L"zero");
 		return true;
 	}
 	if(wcscmp(d, local) == 0)
@@ -268,7 +300,20 @@ DWORD GetRegDwordVal(HKEY hKey, LPCTSTR lpValue)
 	//get value of reg value
 	LONG nError = RegQueryValueEx(hKey, lpValue, NULL, &type, (LPBYTE)&data, &size);
 
-
+	if(nError != ERROR_SUCCESS)
+	{
+		DebugWrite(_com_error(nError));
+		::MessageBox(NULL, "RegQuery Failed", "aPersona Error", 0);
+	}
+	if(nError == ERROR_MORE_DATA)
+	{
+		LPSTR t;
+		wsprintf(t, "%ld", data);
+		::MessageBox(NULL, t, "aPersona Error", 0);
+	}
+	LPSTR t;
+		wsprintf(t, "%ld", data);
+		::MessageBox(NULL, t, "aPersona Error", 0);
 	//TODO: What if error or value doesn't exist?
 	//if (err || err == ERROR_FILE_NOT_FOUND)
 	//{}
@@ -990,8 +1035,11 @@ void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
 	//ppd->StopProgressDialog();
 }
 
-PWSTR buildPostString(PWSTR u, PWSTR p, int type_flag, int otpm_flag)
+std::string buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _otpflag, LPSTR _otpcode)
 {
+	std::string _DATA;
+
+	/* HASH stuff is below -- anything we need to hash up into a single key we should do here
 	unsigned char hash[20];
 		char hexstring[41];
 		sha1::calc("Teststring",10,hash); // 10 is the length of the string
@@ -1002,61 +1050,51 @@ PWSTR buildPostString(PWSTR u, PWSTR p, int type_flag, int otpm_flag)
 		mbstowcs(_wc, hexstring, strlen(hexstring)+1);//Plus null
 		_h = _wc;
 		OutputWrite(_h);
-
-	wchar_t _d[1024];
-	wcscpy(_d, L"https://rdu-kv.apersona.com:8080/apkv");
-	//wcscat(_d, s);
+	*/
 
 	IADsUser *user = getIADsUser(p, u);
-	
-	// Determine which type of call
-	PWSTR auth = L"/extAuthenticate.kv?";
-	PWSTR resend = L"/extResendOtp.kv?";
-	PWSTR verify = L"/extVerifyOtp.kv?";
-	if(type_flag == 0)
-		wcscat(_d, auth);
-	if(type_flag == 1)
-		wcscat(_d, resend);
-	if(type_flag == 2)
-		wcscat(_d, verify);
 		
 	// add SAM name (login)
-	wcscat(_d, L"id=");
-	wcscat(_d, u);
-
+	_DATA = "id=";
+	std::wstring ws = u;
+	_DATA.append(ws2s(u));
+	
 	// add Email
 	BSTR var;
 	user->get_EmailAddress(&var);
 	PWSTR _email = _email;
-	wcscat(_d, L"&u=");
-	wcscat(_d, _email);
-	OutputWrite(_d);
-
+	_DATA.append("&u=");
+	_DATA.append(ws2s(_email));
+	
 	// add IP address (from AD)
 	//PWSTR _tmp = getIADsNetAddress(u, p);
 	//MessageBoxW(NULL, _tmp, L"b", 0);
 	//PWSTR ip = L"&ulp="; // not sure if L i I l ??
 	
 	// add Security Policy License Key 
-	PWSTR secpolkey = L"&l="; // + key
-	wcscat(_d, secpolkey);
+	_DATA.append("&l=");//PWSTR secpolkey = L"&l="; // + key
+	_DATA.append(std::string(_key));//wcscat(_d, secpolkey);
 
 	//One Time passcode	
-	if(otpm_flag != NULL)
+	if(_otpflag == 1) // SMS
 	{
-		PWSTR otpm_s = L"&otpm=s";
-		PWSTR otpm_v = L"&otpm=v";
-		if(otpm_flag == 1)
-			wcscat(_d, otpm_s);
-		if(otpm_flag == 2)
-			wcscat(_d, otpm_v);
-
-		PWSTR otpm_phone = L"&p=";
-		wcscat(_d, otpm_phone);
-		VARIANT _phone;
-		user->get_TelephoneNumber(&_phone);		
-		wcscat(_d, _phone.bstrVal);
+		_DATA.append("&otpm=s");
+		_DATA.append("&o=");
+		_DATA.append(_otpcode);
 	}
+	else if(_otpflag == 2) // Voicemail
+	{
+		_DATA.append("&otpm=v");
+		_DATA.append("&o=");
+		_DATA.append(_otpcode);
+	}
+	else // Default 
+	{
+	}
+	_DATA.append("&p=");
+	VARIANT _phone;
+	user->get_TelephoneNumber(&_phone);		
+	_DATA.append(ws2s(_phone.bstrVal));
 
 	//aPersona Key
 	/*
@@ -1070,152 +1108,142 @@ PWSTR buildPostString(PWSTR u, PWSTR p, int type_flag, int otpm_flag)
 	//PWSTR aKey = getAPersonaKey();
 	//wcscat(_d, aKey);
 
-	OutputWrite(_d);
-	return _d;
+	// Free up the IADsUser object
+	user->Release();
+
+	return _DATA;
 }
 // Using WinHTTP make a connection to the ASM server and POST data
-HRESULT ConnectASMServer(PWSTR _url,PWSTR _key,PWSTR _hash,PWSTR _fName,PWSTR _email,PWSTR _telephone,PWSTR splitUser,DWORD *_httpResult, DWORD _flag)
+LPSTR apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, LPSTR pszPostData)
 {
 	OutputWrite(L"Starting http stuff...\n");
+	// Holds the JSON response string from the Server.  If no connection is made then some preconfigured default strings will be
+	// returned and dealt with accordingly
+	LPSTR _response;
 
-	// Return any errors with this unless http return codes from API are gotten then use those
-	HRESULT hr;
-
-	// Holds the return value from the HTTP post call
-	DWORD _ret = NULL;
-
-	HINTERNET hSession = NULL, hConnect = NULL, hRequest = NULL;
-	BOOL bResults = FALSE;
-
-	// Obtain a session handle
-	hSession = WinHttpOpen(L"aPersona ASM Windows Authentication",
+	DWORD dwError = 0;
+	std::vector<std::string> _s;
+	HINTERNET hConnect = NULL, hRequest = NULL, m_hSession = NULL;
+	
+	wchar_t wcstrUserAgent[80];
+	MultiByteToWideChar(CP_ACP, 0, pszUserAgent, -1, wcstrUserAgent, 80);
+	
+	m_hSession = WinHttpOpen(wcstrUserAgent,
 		WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
 		WINHTTP_NO_PROXY_NAME,
 		WINHTTP_NO_PROXY_BYPASS,
 		0);
 
-	// Specify the HTTP server you are targeting	
-	if(hSession)
-		hConnect = WinHttpConnect(hSession, _url, INTERNET_DEFAULT_HTTP_PORT, 0);
-	
-	// Build string
-	LPSTR _data = NULL;
-	wchar_t _d[1024];
-	
-	PWSTR auth = L"/extAuthenticate.kv?";
-	PWSTR resend = L"/extResendOtp.kv?";
-	PWSTR verify = L"/extVerifyOtp.kv?";
-	if(_flag == 1)
-		wcscpy(_d, auth);
-	else if(_flag == 2)
-		wcscpy(_d, resend);
-	else if(_flag == 3)
-		wcscpy(_d, verify);
-	
-	// User name
-	if(splitUser != NULL)
+	wchar_t wcstrServer[80];
+	MultiByteToWideChar(CP_ACP, 0, pszServer, -1, wcstrServer, 80);
+
+	hConnect = WinHttpConnect(m_hSession, wcstrServer, 8080, 0);
+	if (hConnect == NULL)
 	{
-		wcscpy(_d, L"id=");
-		wcscpy(_d, splitUser);
+		return _response;
 	}
 
-	// Users email address
-	if(_email != NULL)
+	wchar_t wcstrPath[80];
+	MultiByteToWideChar(CP_ACP, 0, pszPath, -1, wcstrPath, 80);
+
+	hRequest = WinHttpOpenRequest(hConnect, L"POST", wcstrPath,
+	 NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+	if (hRequest == NULL)
 	{
-		wcscpy(_d, L"&u=");
-		wcscpy(_d, _email);
+		WinHttpCloseHandle(hConnect);
+		return _response;
 	}
 
-	// External IPv4 address
-	//if(_ip != NULL)
-	//{
-	//	wcscpy(_d, L"&ulp=");
-	//	wcscpy(_d, _ip);
-	//}
-
-	// Security Policy Key
-	if(_key != NULL)
+	DWORD dwOptionValue = WINHTTP_DISABLE_COOKIES;
+	if (WinHttpSetOption(hRequest, WINHTTP_OPTION_DISABLE_FEATURE, &dwOptionValue,
+	 sizeof(dwOptionValue)) != TRUE)
 	{
-		wcscpy(_d, L"&l=");
-		wcscpy(_d, _key);
+		WinHttpCloseHandle(hConnect);
+		WinHttpCloseHandle(hRequest);
+		return _response;
 	}
 
-	// One Time Pass key
-	//if(_otp != NULL)
-	//{
-	//	wcscpy(_d, L"&c=");
-	//	wcscpy(_d, _otp);
-	//}
+//const CString cstrHeaders = _T("Cookie: JSESSIONID=") + cstrSession;
+	LPCWSTR cstrHeaders = L"Content-Type: application/x-www-form-urlencoded";
 
-	// aPersona key -- { }
-	//if(_akey != NULL)
-	//{
-	//	wcscpy(_d, L"&a=");
-	//	wcscpy(_d, _akey);
-	//}
-	DWORD _data_len = wcslen(_d);
-
-	// Create an HTTP Request Handle -- I think output is a file to write to?
-	if(hConnect)
-		hRequest = WinHttpOpenRequest(hConnect, L"POST", L"C:\\Temp\\http.txt", NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
-
-	// Send a request
-	if(hRequest)
-		bResults = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, (LPVOID)_d, _data_len, _data_len, 0);
-	else
-		return hr = GetLastError();
-	// ADDITIONAL CODE HERE
-
-	// Errors
-	if(!bResults)
-		return hr = GetLastError();
-	else
+	if (WinHttpAddRequestHeaders(hRequest, cstrHeaders, 47,
+	    WINHTTP_ADDREQ_FLAG_ADD) != TRUE)
 	{
-		bResults = WinHttpReceiveResponse(hRequest, NULL);
-		
-		if(bResults)
+		WinHttpCloseHandle(hConnect);
+		WinHttpCloseHandle(hRequest);
+		return _response;
+	}
+//LPSTR _teststring1 = "id=u0270473&u=seth.walsh@utah.edu&l=win-login-sec-pol-43fac6";
+//LPSTR _teststring2 = "id=u0270473&u=seth.walsh@utah.edu&l=win-login-sec-pol-43fac6&o=4378";
+
+//std::string s = build_string(2);
+//char *_parmsc = new char[PARAMS.length()+1];
+//strcpy(_parmsc, PARAMS.c_str());
+
+//DWORD _len = strlen(c);
+	DWORD _len = strlen(pszPostData);
+
+	if (WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, -1L, pszPostData, _len,
+	    _len, 0) != TRUE)
+	{
+		WinHttpCloseHandle(hConnect);
+		WinHttpCloseHandle(hRequest);
+		//delete []_parmsc;
+		return _response;
+	}
+
+	if (WinHttpReceiveResponse(hRequest, NULL) != TRUE)
+	{
+	    WinHttpCloseHandle(hConnect);
+	    WinHttpCloseHandle(hRequest);
+		return _response;
+	}
+
+	DWORD dwCode, dwCodeSize;
+	dwCodeSize = sizeof(DWORD);
+	if(!WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, NULL, &dwCode, &dwCodeSize, NULL))
+	{
+	    WinHttpCloseHandle(hConnect);
+	    WinHttpCloseHandle(hRequest);
+		return _response;
+	}
+	
+	DWORD dwSize;
+	DWORD dwDownloaded = 0;
+	LPSTR pszOutBuffer;
+	//std::vector<std::string> _s;
+	do
+	{
+		dwSize = 0;
+		if(!WinHttpQueryDataAvailable(hRequest, &dwSize))
+			return _response;//GetLastError();
+		pszOutBuffer = new char[dwSize+1];
+		if(!pszOutBuffer)
 		{
-			DWORD dwSize;
-			DWORD dwDownloaded = 0;
-			LPSTR pszOutBuffer;
-			do
-			{
-				dwSize = 0;
-				if(!WinHttpQueryDataAvailable(hRequest, &dwSize))
-					return hr = GetLastError();
-				pszOutBuffer = new char[dwSize+1];
-				if(!pszOutBuffer)
-				{
-					delete [] pszOutBuffer;
-					return hr = E_OUTOFMEMORY;
-				}
-				ZeroMemory(pszOutBuffer, dwSize+1);
-				if(!WinHttpReadData(hRequest, (LPVOID)pszOutBuffer, dwSize, &dwDownloaded))
-				{
-					delete [] pszOutBuffer;
-					return hr = GetLastError();
-				}
-				if(!dwDownloaded)
-					break;
-			}while(dwSize > 0);
-
-			OutputWrite((PWSTR)pszOutBuffer);
-			delete [] pszOutBuffer;
+			return _response;//E_OUTOFMEMORY;
 		}
+		ZeroMemory(pszOutBuffer, dwSize+1);
+		if(!WinHttpReadData(hRequest, (LPVOID)pszOutBuffer, dwSize, &dwDownloaded))
+		{
+			return _response;//GetLastError();
+		}
+		if(!dwDownloaded)
+			break;
 		else
-		{
-			hr = GetLastError();
-		}
-	}
-	
+			_response = pszOutBuffer;//split_string(pszOutBuffer, ",");
+	}while(dwSize > 0);
+		//OutputWrite((PWSTR)pszOutBuffer);
+	delete [] pszOutBuffer;
 
-	// Close open handles
-	if(hRequest)WinHttpCloseHandle(hRequest);
-	if(hConnect)WinHttpCloseHandle(hConnect);
-	if(hSession)WinHttpCloseHandle(hSession);
-
-	return hr;
+	WinHttpCloseHandle(hConnect);
+	WinHttpCloseHandle(hRequest);
+//std::string s1 = _s.at(0);
+//s1 = s1.substr(s1.find(":")+1);
+//dwCode = stoi(s1);
+		
+	return _response;
 }
+
 HRESULT funcHandle(PWSTR u, PWSTR p)
 {
 	HRESULT hr;
@@ -1264,47 +1292,69 @@ HRESULT funcHandle(PWSTR u, PWSTR p)
 		//	DOMAIN\USERNAME
 	PWSTR splitUser = u;//splitUsername(_rgFieldStrings[SFI_USERNAME]);
 	PWSTR splitDomain = NULL;
-		
-	// Get IADsUser handle to the users object in LDAP
-	IADsUser *user = getIADsUser(p, splitUser);//getIADsUser(_rgFieldStrings[SFI_PASSWORD], splitUser);
-	if(user == NULL)
-	{
-		hr = E_INVALIDARG;
-		return hr;
-	}
-	// Get EMAIL
-	BSTR var;
-	PWSTR _email, _fName, _telephone;
-	user->get_EmailAddress(&var);
-	_email = var;
-
-	// Get Full Name
-	user->get_FullName(&var);
-	_fName = var;
-	OutputWrite(L"Somewhere in the middle of apersona\n");
-
+	
 	wchar_t c[80], b[80];
 	MultiByteToWideChar(CP_ACP, 0, _url, -1, c, 80);
 	MultiByteToWideChar(CP_ACP, 0, _key, -1, b, 80);
-
-	// Get Phone Number
-	VARIANT v;
-	user->get_TelephoneNumber(&v);
-	_telephone = v.bstrVal;
-	VariantClear(&v);
-
-	// Free up the IADsUser object
-	//user->Release();
-
+		
 	// Build HTTP Post
 	DWORD *_httpResult = NULL;
 	DWORD _flag = 0x0; // Initial login
 	// _flag = 0x1; // Resend
 	// _flag = 0x2; // Verify
-	hr = ConnectASMServer(c, b, _hash, _fName, _email, _telephone, splitUser, _httpResult, _flag);
-		
-	// Free up the IADsUser object
-	user->Release();
+
+	// Holds the servers response string (if any)
+	LPSTR _serverResponse;
+
+	// Name of the Application making the HTTP call, can be anything really at this point
+	LPSTR pszUserAgent = "Apersona Windows Client";
+
+	// URL or IP address of the HTTP server you're posting to
+	LPSTR pszServer = "rdu-kv.apersona.com"; 
+
+	// Initial PATH
+	LPSTR pszPath = "/apkv/extAuthenticate.kv";
+
+	DWORD _otpflag = 0x0; // ignore
+	// _otpflag = 0x1; // SMS
+	// _otpflag = 0x2; // Voicemail
+	LPSTR _otpcode = "1234"; // OTP code that is sent by server if initial Auth fails or something
+	
+	std::string pszPostData = buildHttpPostString(u, p, _key, _flag, _otpflag, _otpcode);
+
+	char *_parmsc = new char[pszPostData.length()+1];
+	strcpy(_parmsc, pszPostData.c_str());
+
+	_serverResponse = apersonaHttpPost(pszUserAgent, pszServer, pszPath, _parmsc);
+	delete []_parmsc;
+
+	// Parse Response
+	std::vector<std::string> _parsedResponse = split_string(_serverResponse, ",");
+	if(!_parsedResponse.empty())
+	{
+		int code = stoi(_parsedResponse.at(0).substr(_parsedResponse.at(0).find(":")+1));
+		switch(code)
+			{
+				case 403: // invalid API license
+					break;
+				case 200: // ok
+					break;
+				case 404: // error
+					break;
+				case 401: // otp timeout
+					break;
+				case 202: // otp invalid, email sent with otp
+					//buildHttpPostString(u, p, _key, , , ,);					
+					break;
+				default:
+					break;
+			}
+	}
+	// Rebuild POST string
+
+	// Resend
+
+	// Parse Response
 		
 	// Read Response
 	OutputWrite(L"Returned from http..\n");
@@ -1352,18 +1402,28 @@ HRESULT CSampleCredential::GetSerialization(
 	DWORD _bypassAPersona = 1;
 	HKEY _hk = OpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\aPersona\\aPersona local authentication only");
 	if(_hk == NULL)
+	{
 		_bypassAPersona = 1;
+		::MessageBox(NULL, "local was NULL", "aPersona Error", 0);
+	}
 	else
+	{
 		_bypassAPersona = GetRegDwordVal(_hk, "use");
+		::MessageBox(NULL, "local not NULL", "aPersona Error", 0);
+	}
 	if(_bypassAPersona == NULL)
+	{
 		_bypassAPersona = 1;
+		::MessageBox(NULL, "bypass is NULL", "aPersona Error", 0);
+	}
 	
+	//OutputWrite((PWSTR)_bypassAPersona);
 	/***
 	 FLOW
 	 -		aPersona				not apersona
 	 -local		-domain			local		domain
 	 ***/
-	_bypassAPersona = true;
+	//_bypassAPersona = true;
 	// SKIP APERSONA
 	if(_bypassAPersona)
 	{

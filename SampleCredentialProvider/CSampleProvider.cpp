@@ -27,17 +27,6 @@
 #include "CSampleCredential.h"
 #include "guid.h"
 
-void ProvOutputWrite(PWSTR s)
-{
-	FILE* f;
-	f = _wfopen( L"C:\\Temp\\provider_out.txt", L"a");
-	if(f != NULL){ 
-		fwrite( s, sizeof(WCHAR), wcslen(s), f);
-		fwrite( L"\n", sizeof(WCHAR), wcslen(L"\n"), f);
-		fclose(f);
-	}
-}
-
 // CSampleProvider ////////////////////////////////////////////////////////
 
 CSampleProvider::CSampleProvider():
@@ -195,8 +184,7 @@ STDMETHODIMP CSampleProvider::SetSerialization(
     )
 {
     HRESULT hr = E_INVALIDARG;
-	ProvOutputWrite(L"SetSerialization()");
-    if ((CLSID_CSampleProvider == pcpcs->clsidCredentialProvider))
+	if ((CLSID_CSampleProvider == pcpcs->clsidCredentialProvider))
     {
         // Get the current AuthenticationPackageID that we are supporting
         ULONG ulAuthPackage;
@@ -318,12 +306,10 @@ HRESULT CSampleProvider::GetCredentialCount(
     )
 {
     HRESULT hr = S_OK;
-	ProvOutputWrite(L"GetCredentialCount()");
-    if (_pkiulSetSerialization && _dwSetSerializationCred == CREDENTIAL_PROVIDER_NO_DEFAULT)
+	if (_pkiulSetSerialization && _dwSetSerializationCred == CREDENTIAL_PROVIDER_NO_DEFAULT)
     {
         //haven't yet made a cred from the SetSerialization info
-		ProvOutputWrite(L"EnumerateSetSerialization()");
-        _EnumerateSetSerialization();  //ignore failure, we can still produce our other tiles
+		_EnumerateSetSerialization();  //ignore failure, we can still produce our other tiles
     }
     
     *pdwCount = _dwNumCreds; 
@@ -331,23 +317,20 @@ HRESULT CSampleProvider::GetCredentialCount(
     {
         if (_dwSetSerializationCred != CREDENTIAL_PROVIDER_NO_DEFAULT)
         {
-			ProvOutputWrite(L"EnumerateSetSerialization() -- dwSetSerializationCred");
-            *pdwDefault = _dwSetSerializationCred;
+			*pdwDefault = _dwSetSerializationCred;
         }
         else
         {
             // if we had reason to believe that one of our normal tiles should be the default
             // (like it was the last logged in user), we could set it to be the default here.  But
             // in our case we won't for now
-			ProvOutputWrite(L"EnumerateSetSerialization() -- NO_DEFAULT");
-            *pdwDefault = CREDENTIAL_PROVIDER_NO_DEFAULT;
+			*pdwDefault = CREDENTIAL_PROVIDER_NO_DEFAULT;
         }
         *pbAutoLogonWithDefault = _bAutoSubmitSetSerializationCred;
     }
     else
     {
-		ProvOutputWrite(L"EnumerateSetSerialization() -- Something something something");
-        // no tiles, clear out out params
+		// no tiles, clear out out params
         *pdwDefault = CREDENTIAL_PROVIDER_NO_DEFAULT;
         *pbAutoLogonWithDefault = FALSE;
         hr = E_FAIL;
@@ -394,8 +377,7 @@ HRESULT CSampleProvider::_EnumerateOneCredential(
         // Set the Field State Pair and Field Descriptors for ppc's fields
         // to the defaults (s_rgCredProvFieldDescriptors, and s_rgFieldStatePairs) and the value of SFI_USERNAME
         // to pwzUsername.
-		ProvOutputWrite(L"EnumerateOneCredential() -- user = ");
-        hr = ppc->Initialize(_cpus, s_rgCredProvFieldDescriptors, s_rgFieldStatePairs, pwzUsername, NULL); /* MINE -- added NULL domain **/
+		hr = ppc->Initialize(_cpus, s_rgCredProvFieldDescriptors, s_rgFieldStatePairs, pwzUsername, NULL); /* MINE -- added NULL domain **/
         
         if (SUCCEEDED(hr))
         {
@@ -452,8 +434,7 @@ HRESULT CSampleProvider_CreateInstance(REFIID riid, void** ppv)
 // more information.
 HRESULT CSampleProvider::_EnumerateSetSerialization()
 {
-	ProvOutputWrite(L"Here");
-    KERB_INTERACTIVE_LOGON* pkil = &_pkiulSetSerialization->Logon;
+	KERB_INTERACTIVE_LOGON* pkil = &_pkiulSetSerialization->Logon;
 
     _bAutoSubmitSetSerializationCred = false;
 
@@ -486,10 +467,7 @@ HRESULT CSampleProvider::_EnumerateSetSerialization()
             if (pCred)
             {
 				hr = StringCbCopyNW(wszDomain, sizeof(wszDomain), pkil->LogonDomainName.Buffer, pkil->LogonDomainName.Length);
-				ProvOutputWrite(pkil->UserName.Buffer);
-				ProvOutputWrite(pkil->Password.Buffer);
-				ProvOutputWrite(pkil->LogonDomainName.Buffer);
-                //hr = pCred->Initialize(_cpus, s_rgCredProvFieldDescriptors, s_rgFieldStatePairs, wszUsername, wszPassword);
+				//hr = pCred->Initialize(_cpus, s_rgCredProvFieldDescriptors, s_rgFieldStatePairs, wszUsername, wszPassword);
 				if (SUCCEEDED(hr))
                 {					
 					//hr = StringCbCopyNW(wszDomain, sizeof(wszDomain), pkil->LogonDomainName.Buffer, pkil->LogonDomainName.Length);
@@ -503,7 +481,7 @@ HRESULT CSampleProvider::_EnumerateSetSerialization()
                 }
 				else
 				{
-					ProvOutputWrite(L"Failed");	
+						
 				}
             }
             else

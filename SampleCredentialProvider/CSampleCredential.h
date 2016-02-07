@@ -114,6 +114,7 @@ class CSampleCredential : public ICredentialProviderCredential
 
   private:
 	  PWSTR _pDomainName; // Holds the current domain name, if not domain joined then localhost is the name
+	  PWSTR _pszOTP; // Holds the OTP the user enters
     LONG                                  _cRef;
 
     CREDENTIAL_PROVIDER_USAGE_SCENARIO    _cpus; // The usage scenario for which we were enumerated.

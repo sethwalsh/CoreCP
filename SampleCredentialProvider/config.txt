@@ -1,0 +1,20 @@
+# URL for the APersona site
+[url] = rdu-kv.apersona.com
+
+# Security Policy License Key
+[key] = win-login-sec-pol-43fac6
+
+# Bypass APersona authentication 
+#	True : 1
+#	False : 0
+[bypass] = 0
+
+# OTP Send method
+#	Default Email : 0
+#	SMS	      : 1
+#	Voice	      : 2
+[otpmethod] = 0
+
+# APersona One Time Transaction key
+#	Default		: 0 (No key yet)
+[identifier] = 0c42256a6e49d374e097d94a14aa26dd

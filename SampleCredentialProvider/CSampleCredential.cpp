@@ -20,6 +20,7 @@
 
 // For HTTP response
 #include <vector>
+#include <iterator>
 
 //#include <atlbase.h>
 #include <AdsHlp.h>
@@ -51,9 +52,28 @@
 //generating hash
 #include "sha1.h"
 #include <time.h>
+#include <WinCrypt.h>
+#include <sstream>
 
 #include <fstream>
 
+std::string _pszEmail, _pszVoicePhone, _pszSMSPhone;
+std::string GetConfigOpt(std::string file, std::string key)
+{
+	std::string value;
+	std::ifstream ifs(file);
+	while(ifs.good())
+	{
+		std::string line;
+		getline(ifs, line);
+		if(line.find("#") == std::string::npos)
+		{			
+			if(line.find(key) != std::string::npos)
+				value = line.substr(line.find("=")+2);
+		}
+	}
+	return value;
+}
 void writeToLog(HRESULT hr)
 {
 	//TODO
@@ -87,7 +107,7 @@ std::string ws2s(const std::wstring& s)
     delete[] buf;
     return r;
 }
-
+/*
 void DebugWrite(_com_error e)
 {	
 	FILE* f;
@@ -112,7 +132,7 @@ void OutputWrite(PWSTR s)
 		fclose(f);
 	}
 }
-
+*/
 /*
 	Checks to see if the string argument (user chosen domain) is the local machine name.  If so then the
 	user has requested to authenticate locally and returns TRUE.
@@ -122,18 +142,22 @@ bool isLocal(PWSTR d)
 	WCHAR local[MAX_COMPUTERNAME_LENGTH+1];
 	DWORD cch = ARRAYSIZE(local);
 	GetComputerNameW(local, &cch);	
-	OutputWrite(local);
-	OutputWrite(d);
+	//OutputWrite(local);
+	//OutputWrite(d);
 
 	if(d == NULL)
 		return false;	
 	if(wcslen(d) == 0)
 	{
 		//OutputWrite(L"zero");
+		//::MessageBoxA(NULL, "zero", "Local Login Error", 0);
 		return true;
 	}
 	if(wcscmp(d, local) == 0)
+	{
+		//::MessageBoxA(NULL, "equal", "Local Login Error", 0);
 		return true;
+	}
 	return false;
 }
 PWSTR splitUsername(PWSTR u)
@@ -195,170 +219,7 @@ char* GetMacAddress()
 	free(AdapterInfo);
 	return mac_addr;
 }
-/*************************************************
-NAME/CALL: OpenKey(HKEY hRootKey, wchar_t* strKey)
 
-DESCRIPTION:
-		Attempts to open a given hkey. If
-		the key doesn't exist, it is created.
-
-INPUTS:
-		hRootKey : Where will the key reside? HKEY_LOCAL_MACHINE etc.
-		strKey : name of key
-
-OUTPUTS:
-		HKEY, hk: Reference to key
-
-*************************************************/
-HKEY OpenKey(HKEY hRootKey, LPCTSTR strKey)
-{
-	HKEY hk;
-	LONG err;
-	
-	//attempt to open key
-	err = RegOpenKeyEx(hRootKey, strKey, NULL, KEY_ALL_ACCESS, &hk);
-
-	//does key exist?
-	if(err == ERROR_FILE_NOT_FOUND)
-	{
-		err = RegCreateKeyEx(hRootKey, strKey, NULL, NULL, REG_OPTION_NON_VOLATILE,KEY_ALL_ACCESS,NULL, &hk, NULL);
-	}
-
-	//TODO: What if error?
-	if (err != ERROR_SUCCESS)
-		return NULL;
-	return hk;
-}
-
-
-/*************************************************
-NAME/CALL: SetRegDword(HKEY hKey, LPCTSTR lpValue, DWORD data)
-
-DESCRIPTION:
-		Sets a DWORD type field in a given registry key
-
-INPUTS:
-		hkey : Reference to key
-		lpValue : Name of field
-		data : data in type DWORD
-
-*************************************************/
-void SetRegDword(HKEY hKey, LPCTSTR lpValue, DWORD data)
-{
-	//set value field of given key to data
-	LONG nError = RegSetValueEx(hKey, lpValue, NULL, REG_DWORD, (LPBYTE)&data, sizeof(DWORD));
-
-	//TODO: What if error?
-	//if (err)
-	//{}
-}
-
-
-/*************************************************
-NAME/CALL: SetRegString(HKEY hKey, LPCTSTR lpValue, LPCTSTR data)
-
-DESCRIPTION:
-		Sets a LPCTSTR type field in a given registry key
-
-INPUTS:
-		hkey : Reference to key
-		lpValue : Name of field
-		data : data in type LPCTSTR
-
-*************************************************/
-void SetRegString(HKEY hKey, LPCTSTR lpValue, LPCTSTR data)
-{
-	//set value field of given key to data
-	LONG nError = RegSetValueEx(hKey, lpValue, NULL, REG_SZ, (LPBYTE)data, lstrlen(data)*2);
-
-	//TODO: What if error?
-	//if (err)
-	//{}
-}
-
-
-/*************************************************
-NAME/CALL: GetRegDwordVal(HKEY hKey, LPCTSTR lpValue)
-
-DESCRIPTION:	
-		Gets DWORD type data from a given field in 
-		given registry key
-
-INPUTS:
-		hkey: Reference to key
-		lpValue : Name of field
-
-OUTPUTS:
-		data : Data stored in field referred to by
-			name in lpValue.
-
-*************************************************/
-DWORD GetRegDwordVal(HKEY hKey, LPCTSTR lpValue)
-{
-
-	DWORD data;
-	DWORD size = sizeof(data);
-	DWORD type = REG_DWORD;
-	//get value of reg value
-	LONG nError = RegQueryValueEx(hKey, lpValue, NULL, &type, (LPBYTE)&data, &size);
-
-	if(nError != ERROR_SUCCESS)
-	{
-		DebugWrite(_com_error(nError));
-		::MessageBox(NULL, "RegQuery Failed", "aPersona Error", 0);
-	}
-	if(nError == ERROR_MORE_DATA)
-	{
-		LPSTR t;
-		wsprintf(t, "%ld", data);
-		::MessageBox(NULL, t, "aPersona Error", 0);
-	}
-	OutputWrite(L"blah");
-	//TODO: What if error or value doesn't exist?
-	//if (err || err == ERROR_FILE_NOT_FOUND)
-	//{}
-
-	return data;
-
-}
-
-/*************************************************
-NAME/CALL: GetRegDwordString(HKEY hKey, LPCTSTR lpValue)
-
-DESCRIPTION:	
-		Gets LPCTSTR type data from a given field in 
-		given registry key
-
-INPUTS:
-		hkey: Reference to key
-		lpValue : Name of field
-
-OUTPUTS:
-		data : Data stored in field referred to by
-			name in lpValue.
-
-*************************************************/
-LPCTSTR GetRegDwordString(HKEY hKey, LPCTSTR lpValue)
-{
-	//LPCTSTR data;
-	wchar_t data[4096];
-	DWORD size = 4096;//lstrlen(data)*2;
-	DWORD type = REG_SZ;
-
-	//get value of reg value
-	LONG nError = RegQueryValueEx(hKey, lpValue, NULL, &type, (LPBYTE)&data, &size);
-	
-	//TODO: What if error or value doesn't exist?
-	//if (err || err == ERROR_FILE_NOT_FOUND)
-	//{}
-	if(nError == ERROR_SUCCESS)
-		return (LPCTSTR)data;
-	else
-	{
-		DebugWrite(_com_error(nError));
-		return NULL;
-	}
-}
 
 LPWSTR GetDomain()
 {
@@ -695,6 +556,9 @@ HRESULT CSampleCredential::SetStringValue(
 						GetComputerNameW(wsz, &cch);
 						wcscat(_b, wsz);
 						hr = _pCredProvCredentialEvents->SetFieldString(this, SFI_DOMAIN, _b);
+						//std::wstring ws(_b);
+						//std::vector<wchar_t> v(ws.begin(), ws.end());
+						//_pDomainName = v.data();
 						_pDomainName = _b;
 					}
 				}
@@ -704,8 +568,10 @@ HRESULT CSampleCredential::SetStringValue(
 					wchar_t _b[80];
 					wcscpy(_b, L"Log on to: ");
 					wcscat(_b, _p);
-					hr = _pCredProvCredentialEvents->SetFieldString(this, SFI_DOMAIN, _b);	
-					_pDomainName = _b;
+					hr = _pCredProvCredentialEvents->SetFieldString(this, SFI_DOMAIN, _b);
+					std::wstring ws(_b);
+					std::vector<wchar_t> v(ws.begin(), ws.end());
+					_pDomainName = v.data();
 				}
 			}
 			else
@@ -802,11 +668,17 @@ HRESULT CSampleCredential::CommandLinkClicked(DWORD dwFieldID)
 }
 //------ end of methods for controls we don't have in our tile ----//
 
-IADsUser* getIADsUser(PWSTR pw, PWSTR u)
+//	Returns a pointer to an IADsUser object that can be used to collect domain attributes for that user otherwise returns NULL if 
+//	a failure occurs.
+//
+//	@param	pw	A PWSTR for the users password that is required to authenticate the search
+//  @param	u	A PWSTR for the users username that is required to authenticate the search and what to search for
+//  @param	hr	A HRESULT address to store the HRESULT of various IADs calls
+//  @ret	_user	A IADsUser pointer
+IADsUser* getIADsUser(PWSTR pw, PWSTR u, HRESULT& hr)
 {
-	HRESULT hr;
 	IDirectorySearch *pDSSearch = NULL;
-	IADsUser *user = NULL;
+	IADsUser *_user = NULL;
 	CoInitialize(NULL);
 	/// WinNT - used to communicate with windows domain controllers.
 	/// LDAP  - used to communicate with LDAP servers, such as Active Directory.
@@ -820,8 +692,7 @@ IADsUser* getIADsUser(PWSTR pw, PWSTR u)
 	***/
 	/// ADs   - used to provde an IADsNamespaces implementation that can be used to enumerate all the ADSI providers installed on the client
 
-	//hr = ADsGetObject(L"WinNT://contoso/u0270473,user", IID_IADs, (void**)&pUser);
-	//hr = ADsGetObject(L"WinNT://contoso/u0270473", IID_IADsUser, (void**)&user);
+	// Get the current Domain
 	LPWSTR pszDomain = GetDomain();	
 		
 	wchar_t dbuf[64];
@@ -847,20 +718,22 @@ IADsUser* getIADsUser(PWSTR pw, PWSTR u)
 		hr = pDSSearch->ExecuteSearch(buf, pszAttr, 1, &hSearch);
 		if(!SUCCEEDED(hr))
 		{
-			//DebugWrite(_com_error(hr));
+			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
 			return NULL;
 		}
 		hr = pDSSearch->GetFirstRow(hSearch);
 		if(!SUCCEEDED(hr))
 		{
-			//DebugWrite(_com_error(hr));
+			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
+			pDSSearch->Release();
 			return NULL;
 		}
 		ADS_SEARCH_COLUMN column;
 		hr = pDSSearch->GetColumn(hSearch, L"distinguishedName", &column);
 		if(!SUCCEEDED(hr))
 		{
-			//DebugWrite(_com_error(hr));
+			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
+			pDSSearch->Release();
 			return NULL;
 		}
 		PWSTR s = column.pADsValues->DNString;
@@ -869,19 +742,19 @@ IADsUser* getIADsUser(PWSTR pw, PWSTR u)
 		wchar_t _d[128];
 		wcscpy(_d, L"LDAP://");
 		wcscat(_d, s);
-		hr = ADsOpenObject(_d, u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&user);
+		hr = ADsOpenObject(_d, u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&_user);
 		if(!SUCCEEDED(hr))
 		{
-			//DebugWrite(_com_error(hr));
+			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
 			return NULL;
 		}		
-		return user;
+		return _user;
 	}	
-	return user;
+	return _user;
 }
-/*
-Gets Processor ID
-*/
+
+//Gets Processor ID
+// @ret	procInfo a char pointer to the string processor id
 char* GetProcessor() {
 	char procInfo[10];
 
@@ -897,96 +770,267 @@ char* GetProcessor() {
 	return procInfo;
 }
 
-/*
-//////////////////////////////////////////////////////////////////////////
-MINE - 
-Grab user ID, email, OS, MAC, CPU
-
-//////////////////////////////////////////////////////////////////////////
-*/
-void EnumerateUserInfo(PWSTR pw, PWSTR u, HWND hwndOwner,IProgressDialog * ppd)
+// Returns a DWORD value for a given Registry key within the HKLM\SOFTWARE\APersona hive
+DWORD GetKeyValueDword(std::string key)
 {
+	HKEY hApersonaKey = NULL;
+	unsigned long dwType = REG_DWORD;
+    DWORD dwBufferSize = 1024;
+	DWORD sConfigValue;
+	std::string sRoot = "SOFTWARE\\APersona\\";
 
-	HRESULT hr;
-	
-	DWORD comp = 1;
-	DWORD comp2 = 2;
-	DWORD tot = 2;
-
-	char* userMac;
-	char* proccessorInfo;
-
-	//create progress box
-	//Start Progress Dialog and give it a title
-	//ppd->StartProgressDialog(hwndOwner,NULL,PROGDLG_MODAL,NULL);
-	//ppd->SetTitle(L"This Is A Progress Box");
-
-	//set progress to 50 %
-	//ppd->SetProgress(comp,tot);
-
-	//sleep for two seconds to simulate "work"
-	//Sleep(2000);		
-
-	//check if cancel
-	//if(ppd->HasUserCancelled())
-	//{
-	//	//if so close dialog box
-	//	ppd->StopProgressDialog();
-	//}
-
-	/*
-
-		Create salt and hash using mac address
-
-		*/
-		//user current time stamp as seed
-		srand(time(NULL));
-
-		//create rudimentary salt
-		char s[3];
-		s[0] = rand();
-		s[1] = rand();
-		s[2] = rand();
-
-		//get mac address
-		userMac = GetMacAddress();
-
-		//concatenate the two
-		strcat(userMac,s);
-
-		//compute SHA
-		size_t length = sizeof(userMac);
-		//unsigned char finalHash[SHA_DIGEST_LENGTH];
-		//SHA1((unsigned char*)userMac,length,finalHash);
-		//finalHash now contains the hashed mac addr
-		unsigned char hash[20];
-		char hexstring[41];
-		sha1::calc("Teststring",10,hash); // 10 is the length of the string
-		sha1::toHexString(hash, hexstring);
-		
-		LPWSTR _h;
-		wchar_t _wc[82];
-		mbstowcs(_wc, hexstring, strlen(hexstring)+1);//Plus null
-		_h = _wc;
-		OutputWrite(_h);
-		
-		//get CPU info
-		proccessorInfo = GetProcessor();
-						
-	//set to 100% done
-	//ppd->SetProgress(comp2,tot);
-	
-	 //close
-	//ppd->StopProgressDialog();
+	//Open the "Uninstall" key.
+	HRESULT hr = RegOpenKeyEx(HKEY_LOCAL_MACHINE, sRoot.append(key).c_str(), 0, KEY_READ, &hApersonaKey);
+	if(!SUCCEEDED(hr))
+	{		
+		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
+		RegCloseKey(hApersonaKey);
+	}
+	hr = RegQueryValueEx(hApersonaKey, key.c_str(), NULL, &dwType, (LPBYTE)sConfigValue, &dwBufferSize);
+	if(!SUCCEEDED(hr))
+	{
+		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
+		RegCloseKey(hApersonaKey);
+	}
+	// Error check
+	RegCloseKey(hApersonaKey);
+				
+	return sConfigValue;
 }
 
-std::string getHash()
+// Reads a string value from a registry key in the HKLM\SOFTWARE\APersona hive
+// @ret hr HRESULT containing any errors from the lookup
+HRESULT GetKeyValue(std::string key, std::string& value)
 {
-	std::string _ret;
-	//apersonaKey=md5(sha256(cpuID + longsalt))-(md5(sha256(installed-apps + longsalt))
-	return _ret;
+	HKEY hApersonaKey = NULL;
+	HKEY hConfigKey = NULL;
+	DWORD dwType = KEY_ALL_ACCESS;
+    DWORD dwBufferSize = 0;
+	char sConfigValue[1024];//WCHAR sConfigValue[1024];
+	std::string sRoot = "SOFTWARE\\APersona\\";
+
+	//Open the "Uninstall" key.
+	HRESULT hr = RegOpenKeyEx(HKEY_LOCAL_MACHINE, sRoot.append(key).c_str(), 0, KEY_READ, &hApersonaKey);
+	if(SUCCEEDED(hr))
+	{
+		hr = RegQueryValueEx(hApersonaKey, key.c_str(), NULL,	&dwType, NULL, &dwBufferSize);
+		if(SUCCEEDED(hr))
+		{
+			hr = RegQueryValueEx(hApersonaKey, key.c_str(), NULL,	&dwType, (LPBYTE)sConfigValue, &dwBufferSize);
+			if(SUCCEEDED(hr))
+			{
+				RegCloseKey(hApersonaKey);
+				std::string s(sConfigValue);
+				value = s;
+				return hr;
+			}
+			else
+			{
+				RegCloseKey(hApersonaKey);
+				value = "";
+				//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
+				return hr;
+			}
+		}
+		else
+		{
+			RegCloseKey(hApersonaKey);
+			value = "";
+			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
+			return hr;
+		}
+	}
+	else
+	{
+		RegCloseKey(hApersonaKey);
+		value = "";
+		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
+		return hr;
+	}	
+	return hr;
 }
 
+// Gets a list of installed applications and returns them as a single string which is used later
+// to create a unique SHA256 hash
+std::string GetInstalledApps()
+{
+	std::string list = "";
+	HKEY hUninstKey = NULL;
+    HKEY hAppKey = NULL;
+    LPSTR sAppKeyName;
+    LPSTR sSubKey;
+    WCHAR sDisplayName[1024];
+    LPCSTR sRoot = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
+    long lResult = ERROR_SUCCESS;
+    DWORD dwType = KEY_ALL_ACCESS;
+    DWORD dwBufferSize = 0;
+
+    //Open the "Uninstall" key.
+    if(RegOpenKeyEx(HKEY_LOCAL_MACHINE, sRoot, 0, KEY_READ, &hUninstKey) != ERROR_SUCCESS)
+    {
+		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
+        return "";
+    }
+
+    for(DWORD dwIndex = 0; lResult == ERROR_SUCCESS; dwIndex++)
+    {
+        //Enumerate all sub keys...
+        dwBufferSize = sizeof(sAppKeyName);
+        if((lResult = RegEnumKeyEx(hUninstKey, dwIndex, sAppKeyName,
+            &dwBufferSize, NULL, NULL, NULL, NULL)) == ERROR_SUCCESS)
+        {
+            //Open the sub key.
+            wsprintf(sSubKey, "%s\\%s", sRoot, sAppKeyName);
+            if(RegOpenKeyEx(HKEY_LOCAL_MACHINE, sSubKey, 0, KEY_READ, &hAppKey) != ERROR_SUCCESS)
+            {
+                RegCloseKey(hAppKey);
+                RegCloseKey(hUninstKey);
+                return "";
+            }
+
+            //Get the display name value from the application's sub key.
+            dwBufferSize = sizeof(sDisplayName);
+            if(RegQueryValueEx(hAppKey, "DisplayName", NULL,
+                &dwType, (unsigned char*)sDisplayName, &dwBufferSize) == ERROR_SUCCESS)
+            {
+                wprintf(L"%s\n", sDisplayName);
+				std::wstring w(sDisplayName);
+				std::string s(w.begin(), w.end());
+				list.append(s);
+            }
+            else{
+                //Display name value doe not exist, this application was probably uninstalled.
+            }
+            RegCloseKey(hAppKey);
+        }
+    }
+    RegCloseKey(hUninstKey);
+    return list;
+}
+
+// Get the unique CPU identifier and return it as a string which is used later to create
+// a unique SHA256 hash
+std::string GetCPUString()
+{
+	// Get extended ids.
+    int CPUInfo[4] = {-1};
+    __cpuid(CPUInfo, 0x80000000);
+    unsigned int nExIds = CPUInfo[0];
+
+    // Get the information associated with each extended ID.
+    char CPUBrandString[0x40] = { 0 };
+    for( unsigned int i=0x80000000; i<=nExIds; ++i)
+    {
+        __cpuid(CPUInfo, i);
+
+        // Interpret CPU brand string and cache information.
+        if  (i == 0x80000002)
+        {
+            memcpy( CPUBrandString,
+            CPUInfo,
+            sizeof(CPUInfo));
+        }
+        else if( i == 0x80000003 )
+        {
+            memcpy( CPUBrandString + 16,
+            CPUInfo,
+            sizeof(CPUInfo));
+        }
+        else if( i == 0x80000004 )
+        {
+            memcpy(CPUBrandString + 32, CPUInfo, sizeof(CPUInfo));
+        }
+	}
+    return CPUBrandString;
+}
+
+enum HashType
+{
+  HashSha1, HashMd5, HashSha256
+};
+
+std::string GetSaltText()
+{
+	HCRYPTPROV hProvider = NULL;
+	if (!::CryptAcquireContextW(&hProvider, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT))
+		return "";
+
+	const DWORD dwLength = sizeof(unsigned int);
+	BYTE pbBuffer[dwLength] = {};
+
+	if (!::CryptGenRandom(hProvider, dwLength, pbBuffer))
+	{
+		::CryptReleaseContext(hProvider, 0);
+		return "";
+	}
+
+	std::ostringstream oss;
+	for (DWORD i = 0; i < dwLength; ++i){
+		//std::cout << std::hex << *static_cast<unsigned int*>(pbBuffer[i]) << std::endl;
+		oss.fill('0');
+		oss.width(2);
+		oss << std::hex << static_cast<const unsigned int>(pbBuffer[i]);
+	}
+
+	if (!::CryptReleaseContext(hProvider, 0))
+		return "";
+	return oss.str();
+}
+std::string GetHashText( const void * data, const size_t data_size, HashType hashType )
+{
+  HCRYPTPROV hProv = NULL;
+
+  if ( ! CryptAcquireContext( &hProv, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT ) ) {
+    return "";
+  }
+
+  BOOL hash_ok = FALSE;
+  HCRYPTPROV hHash = NULL;
+  switch ( hashType ) {
+  case HashSha1 : hash_ok = CryptCreateHash( hProv, CALG_SHA1, 0, 0, &hHash ); break;
+  case HashMd5 : hash_ok = CryptCreateHash( hProv, CALG_MD5, 0, 0, &hHash ); break;
+  case HashSha256 : hash_ok = CryptCreateHash( hProv, CALG_SHA_256, 0, 0, &hHash ); break;
+  }
+
+  if ( ! hash_ok ) {
+    CryptReleaseContext(hProv, 0);
+    return "";
+  }
+
+  if ( ! CryptHashData( hHash, static_cast<const BYTE *>(data), data_size, 0 ) ) {
+    CryptDestroyHash(hHash);
+    CryptReleaseContext(hProv, 0);
+    return "";
+  }
+
+  DWORD cbHashSize = 0, dwCount = sizeof(DWORD);
+  if( ! CryptGetHashParam( hHash, HP_HASHSIZE, (BYTE *)&cbHashSize, &dwCount, 0 ) ) {
+    CryptDestroyHash(hHash);
+    CryptReleaseContext(hProv, 0);
+    return "";
+  }
+
+  std::vector<BYTE> buffer( cbHashSize );
+  if ( ! CryptGetHashParam( hHash, HP_HASHVAL, reinterpret_cast<BYTE*>( &buffer[0] ), &cbHashSize, 0) ) {
+    CryptDestroyHash(hHash);
+    CryptReleaseContext(hProv, 0);
+    return "";
+  }
+
+  std::ostringstream oss;
+
+  for ( std::vector<BYTE>::const_iterator iter = buffer.begin(); iter != buffer.end(); ++iter ) {
+    oss.fill('0');
+    oss.width(2);
+    oss << std::hex << static_cast<const int>(*iter);
+  }
+
+  CryptDestroyHash(hHash);
+  CryptReleaseContext(hProv, 0);
+  return oss.str();
+}
+
+// Builds a HTTP POST string that is passed to the APersona server
 std::string buildAPersonaKey()
 {
 	std::string _ret;
@@ -1013,8 +1057,22 @@ std::string buildAPersonaKey()
 		ver = L"NOTDEFINED";
 	
 	_ret = "{";
-	_ret.append("\"apersonaKey\":");
-	std::string apkeyHash = getHash();
+	_ret.append("\"apersonaKey\":\"");
+			
+	std::string cpu = GetCPUString() + GetSaltText();
+	std::string apps = GetInstalledApps() + GetSaltText();
+
+	std::string h1 = GetHashText(cpu.c_str(), strlen(cpu.c_str()), HashSha256);//getHash();
+	std::string h2 = GetHashText(apps.c_str(), strlen(apps.c_str()), HashSha256);
+	std::string m1 = GetHashText(h1.c_str(), strlen(h1.c_str()), HashMd5);
+	std::string m2 = GetHashText(h2.c_str(), strlen(h2.c_str()), HashMd5);
+
+	std::string apkeyHash = "";
+	apkeyHash.append(m1);
+	apkeyHash.append("-");
+	apkeyHash.append(m2);
+	apkeyHash.append("-mwin\"");
+		
 	_ret.append(apkeyHash);
 
 	//_ret.append(",\"ipAddress\":");
@@ -1035,11 +1093,19 @@ std::string buildAPersonaKey()
 
 	return _ret;
 }
-std::string buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _otpflag, PWSTR _otpcode)
+HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _otpflag, PWSTR _otpcode, std::string& pszPostData )
 {
 	std::string _DATA;
+	HRESULT hr;
 		
-	IADsUser *user = getIADsUser(p, u);
+	IADsUser *user = NULL;
+	user = getIADsUser(p, u, hr);
+
+	if(user == NULL)
+	{
+		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
+		return NULL;//OutputWrite(L"User is null");
+	}
 		
 	// add SAM name (login)
 	_DATA = "id=";
@@ -1052,60 +1118,166 @@ std::string buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWOR
 	PWSTR _email = _email;
 	_DATA.append("&u=");
 	_DATA.append(ws2s(_email));
+
+	_pszEmail = ws2s(_email);
 			
 	// add Security Policy License Key 
 	_DATA.append("&l=");//PWSTR secpolkey = L"&l="; // + key
 	_DATA.append(std::string(_key));//wcscat(_d, secpolkey);
 
-	//One Time passcode	
-	if(_otpflag == 1) // SMS
-	{
-		_DATA.append("&otpm=s");
-		_DATA.append("&o=");
-		OutputWrite(_otpcode);
-		std::wstring _otpws = _otpcode;
-		_DATA.append(ws2s(_otpws));
-	}
-	else if(_otpflag == 2) // Voicemail
-	{
-		_DATA.append("&otpm=v");
-		_DATA.append("&o=");
-		std::wstring _otpws = _otpcode;
-		OutputWrite(_otpcode);
-		_DATA.append(ws2s(_otpws));
-	}
-	else // Default 
-	{
-	}
-	_DATA.append("&p=");
+	//One Time passcode
 	VARIANT _phone;
-	user->get_TelephoneNumber(&_phone);		
-	_DATA.append(ws2s(_phone.bstrVal));
+	VARIANT otpMethod;
+	//BSTR attr = SysAllocString(L"aPersonaOTP");
+	hr = user->Get(L"aPersonaOTP", &otpMethod);
+	std::string otpMethodString;
+	int domainOTPFlag = -1; // Default is Email so we start this as 0 and adjust from there if needed
+	
+	if(SUCCEEDED(hr))
+	{		
+		otpMethodString = ws2s(otpMethod.bstrVal);
+		
+		if(otpMethodString.compare("e") == 0)
+			domainOTPFlag = 0;
+		if(otpMethodString.compare("s") == 0)
+			domainOTPFlag = 1;
+		if(otpMethodString.compare("v") == 0)
+			domainOTPFlag = 2;
+		
+		if(domainOTPFlag != _otpflag)
+		{
+			// Overwrite the local registry setting to match the domain attribute for the user
+			HKEY hApersonaKey;
+			HRESULT hr = RegOpenKeyEx(HKEY_LOCAL_MACHINE, "SOFTWARE\\APersona\\otpm", 0, KEY_ALL_ACCESS, &hApersonaKey);
+			LPCTSTR value = TEXT("otpm");
+			LPCTSTR data;
+			if(domainOTPFlag == 0)
+				data = "0";
+			if(domainOTPFlag == 1)
+				data = "1";
+			if(domainOTPFlag == 2)
+				data = "2";
+			hr = RegSetValueEx (hApersonaKey, value, 0, REG_SZ, (LPBYTE)data, strlen(data)+1);
+		}
+	}
+	
+	if(domainOTPFlag > 0)
+	{
+		char buf[33];
+		sprintf(buf, "%d", domainOTPFlag);
+		::MessageBoxA(NULL, buf, "blah1", 0);
+		if(domainOTPFlag == 1)//if(_otpflag == 1) // SMS
+		{
+			_DATA.append("&otpm=s");
+			_DATA.append("&o=");
+			std::wstring _otpws = _otpcode;
+			_DATA.append(ws2s(_otpws));
+	
+			hr = user->get_TelephoneMobile(&_phone);		
+			_pszSMSPhone = ws2s(_phone.bstrVal);
+			_DATA.append("&p=");
+			_DATA.append(_pszSMSPhone);
+
+			//::MessageBoxA(NULL, "Got domain flag for SMS", "blah1", 0);
+		}
+		else if(domainOTPFlag == 2)//else if(_otpflag == 2) // Voicemail
+		{
+			_DATA.append("&otpm=v");
+			_DATA.append("&o=");
+			std::wstring _otpws = _otpcode;
+			_DATA.append(ws2s(_otpws));
+	
+			// Order for Voicemail attempts is Mobile -> Home -> Main profile phone number
+			hr = user->get_TelephoneMobile(&_phone);
+			if(!SUCCEEDED(hr))
+			{
+				hr = user->get_TelephoneHome(&_phone);
+				if(!SUCCEEDED(hr))
+				{
+					hr = user->get_TelephoneNumber(&_phone);
+				}
+			}
+			_pszVoicePhone = ws2s(_phone.bstrVal);
+			_DATA.append("&p=");
+			_DATA.append(_pszVoicePhone);
+
+			//::MessageBoxA(NULL, "Got domain flag for Voice", "blah1", 0);
+		}
+		else // Default 
+		{
+			//::MessageBoxA(NULL, "Got domain flag for EMAIL", "blah1", 0);
+		}
+	}
+	else
+	{		
+		// Use local registry setting for OTP method because the Domain attribute was not reachable or doesn't exist
+		if(_otpflag == 1) // SMS
+		{
+			_DATA.append("&otpm=s");
+			_DATA.append("&o=");
+			std::wstring _otpws = _otpcode;
+			_DATA.append(ws2s(_otpws));
+	
+			hr = user->get_TelephoneMobile(&_phone);		
+			_pszSMSPhone = ws2s(_phone.bstrVal);
+
+			_DATA.append("&p=");
+			_DATA.append(_pszSMSPhone);
+		}
+		else if(_otpflag == 2) // Voicemail
+		{
+			_DATA.append("&otpm=v");
+			_DATA.append("&o=");
+			std::wstring _otpws = _otpcode;
+			_DATA.append(ws2s(_otpws));
+	
+			// Order for Voicemail attempts is Mobile -> Home -> Main profile phone number
+			hr = user->get_TelephoneMobile(&_phone);
+			if(!SUCCEEDED(hr))
+			{
+				hr = user->get_TelephoneHome(&_phone);
+				if(!SUCCEEDED(hr))
+				{
+					hr = user->get_TelephoneNumber(&_phone);
+				}
+			}
+			_pszVoicePhone = ws2s(_phone.bstrVal);
+			
+			_DATA.append("&p=");
+			_DATA.append(_pszVoicePhone);
+		}
+		else // Default Email
+		{			
+		}
+	}
+	//_DATA.append("&p=");
+	//_DATA.append(ws2s(_phone.bstrVal));
+	
+	// Identifier
+	_DATA.append("&c=");
+	std::string I;
+	hr = GetKeyValue("one-time-trans-key", I);//GetConfigOpt("C:\\Program Files\\aPersona\\config.txt", "identifier");
+	if(!SUCCEEDED(hr))
+		return hr;
+	_DATA.append(I);
 
 	//aPersona Key
-	/*
-	public IP
-	private IP
-	PC or Mobile
-	OS version (win 7, 8, 10, mobile, etc)
-	Webhost -- IP address for local login, RDP is IP address of remote host
-	pageUrl -- “Native Windows Login” or “RDP Login”
-	*/
-	//PWSTR aKey = getAPersonaKey();
-	//wcscat(_d, aKey);
-
+	_DATA.append("&a=");
+	_DATA.append(buildAPersonaKey());
+	
 	// Free up the IADsUser object
 	user->Release();
 
-	return _DATA;
+	pszPostData = _DATA;
+
+	return hr;
 }
 // Using WinHTTP make a connection to the ASM server and POST data
-LPSTR apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, LPSTR pszPostData)
+HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int pszPort, LPSTR pszPostData, LPSTR& response)
 {
-	OutputWrite(L"Starting http stuff...\n");
 	// Holds the JSON response string from the Server.  If no connection is made then some preconfigured default strings will be
 	// returned and dealt with accordingly
-	LPSTR _response;
+	//LPSTR _response;
 
 	DWORD dwError = 0;
 	std::vector<std::string> _s;
@@ -1123,10 +1295,10 @@ LPSTR apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, LPSTR
 	wchar_t wcstrServer[80];
 	MultiByteToWideChar(CP_ACP, 0, pszServer, -1, wcstrServer, 80);
 
-	hConnect = WinHttpConnect(m_hSession, wcstrServer, 8080, 0);
+	hConnect = WinHttpConnect(m_hSession, wcstrServer, pszPort, 0);
 	if (hConnect == NULL)
 	{
-		return _response;
+		return E_ABORT;
 	}
 
 	wchar_t wcstrPath[80];
@@ -1137,7 +1309,7 @@ LPSTR apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, LPSTR
 	if (hRequest == NULL)
 	{
 		WinHttpCloseHandle(hConnect);
-		return _response;
+		return E_ABORT;
 	}
 
 	DWORD dwOptionValue = WINHTTP_DISABLE_COOKIES;
@@ -1146,7 +1318,7 @@ LPSTR apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, LPSTR
 	{
 		WinHttpCloseHandle(hConnect);
 		WinHttpCloseHandle(hRequest);
-		return _response;
+		return E_ABORT;
 	}
 
 //const CString cstrHeaders = _T("Cookie: JSESSIONID=") + cstrSession;
@@ -1157,16 +1329,9 @@ LPSTR apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, LPSTR
 	{
 		WinHttpCloseHandle(hConnect);
 		WinHttpCloseHandle(hRequest);
-		return _response;
+		return E_ABORT;
 	}
-//LPSTR _teststring1 = "id=u0270473&u=seth.walsh@utah.edu&l=win-login-sec-pol-43fac6";
-//LPSTR _teststring2 = "id=u0270473&u=seth.walsh@utah.edu&l=win-login-sec-pol-43fac6&o=4378";
 
-//std::string s = build_string(2);
-//char *_parmsc = new char[PARAMS.length()+1];
-//strcpy(_parmsc, PARAMS.c_str());
-
-//DWORD _len = strlen(c);
 	DWORD _len = strlen(pszPostData);
 
 	if (WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, -1L, pszPostData, _len,
@@ -1175,14 +1340,14 @@ LPSTR apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, LPSTR
 		WinHttpCloseHandle(hConnect);
 		WinHttpCloseHandle(hRequest);
 		//delete []_parmsc;
-		return _response;
+		return E_ABORT;
 	}
 
 	if (WinHttpReceiveResponse(hRequest, NULL) != TRUE)
 	{
 	    WinHttpCloseHandle(hConnect);
 	    WinHttpCloseHandle(hRequest);
-		return _response;
+		return E_ABORT;
 	}
 
 	DWORD dwCode, dwCodeSize;
@@ -1191,32 +1356,31 @@ LPSTR apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, LPSTR
 	{
 	    WinHttpCloseHandle(hConnect);
 	    WinHttpCloseHandle(hRequest);
-		return _response;
+		return E_ABORT;
 	}
 	
 	DWORD dwSize;
 	DWORD dwDownloaded = 0;
 	LPSTR pszOutBuffer;
-	//std::vector<std::string> _s;
 	do
 	{
 		dwSize = 0;
 		if(!WinHttpQueryDataAvailable(hRequest, &dwSize))
-			return _response;//GetLastError();
+			return E_ABORT;//GetLastError();
 		pszOutBuffer = new char[dwSize+1];
 		if(!pszOutBuffer)
 		{
-			return _response;//E_OUTOFMEMORY;
+			return E_ABORT;//E_OUTOFMEMORY;
 		}
 		ZeroMemory(pszOutBuffer, dwSize+1);
 		if(!WinHttpReadData(hRequest, (LPVOID)pszOutBuffer, dwSize, &dwDownloaded))
 		{
-			return _response;//GetLastError();
+			return E_ABORT;//GetLastError();
 		}
 		if(!dwDownloaded)
 			break;
 		else
-			_response = pszOutBuffer;//split_string(pszOutBuffer, ",");
+			response = pszOutBuffer;//split_string(pszOutBuffer, ",");
 	}while(dwSize > 0);
 		//OutputWrite((PWSTR)pszOutBuffer);
 	delete [] pszOutBuffer;
@@ -1224,69 +1388,48 @@ LPSTR apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, LPSTR
 	WinHttpCloseHandle(hConnect);
 	WinHttpCloseHandle(hRequest);
 		
-	return _response;
+	return S_OK;
 }
 
+// Takes a string, like an email address, and scrambles it somewhat by replacing chars with *
+std::string ScrambleString(std::string s)
+{
+	std::string ret = s;
+	size_t found;
+	found = ret.find("@");
+	if(found != std::string::npos)
+	{
+		// Email
+		ret.replace(1, found-1, found-1, '*'); 
+		return ret;
+	}
+	found = ret.find("-");
+	if(found != std::string::npos)
+	{
+		// Phone
+		found = ret.find_last_of("-");
+		ret.replace(0, found-1, (found-1)+1, '*');
+		return ret;
+	}
+	return s;
+}
+// A function handle entry point making it easier to seperate the program flow and debug
 HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
 {
 	HRESULT hr;
-	OutputWrite(L"Next should be OTP code");
-	OutputWrite(OTP);
-	
-	/*************
-		READ in Registry Settings
-		**************/
-		//aPersona RDP authentication -- use
-		//aPersona Adaptive Security Manager URL -- url
-		//aPersona Adaptive Security Policy Key -- key
-	HKEY _rk = NULL;
-	LPCTSTR _url = NULL, _key = NULL;
-	/*
-	//_rk = OpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\aPersona\\aPersona Adaptive Security Manager URL");
-	if(_rk == NULL)
-	{
-		hr = E_INVALIDARG;
-		::MessageBox(NULL, "aPersona has failed to load registry settings.", "aPersona Error", 0);			
-	}	
-	//_url = GetRegDwordString(_rk, "url");
-	if(_url == NULL)
-	{
-		hr = E_INVALIDARG;
-		::MessageBox(NULL, "aPersona has failed to load the Security Manager URL", "aPersona Error", 0);			
-	}
-	//_rk = OpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\aPersona\\aPersona Adaptive Security Policy Key");
-	if(_rk == NULL)
-	{
-		hr = E_INVALIDARG;
-		::MessageBox(NULL, "aPersona has failed to load the Security Policy Key", "aPersona Error", 0);					
-	}
-	//_key = GetRegDwordString(_rk, "key");
-	if(_key == NULL)
-	{
-		hr = E_INVALIDARG;
-		::MessageBox(NULL, "aPersona has failed to load the Security Policy Key", "aPersona Error", 0);			
-	}
-	*/
-	_key = "win-login-sec-pol-43fac6";
-	_url = "rdu-kv.apersona.com";
-	// Get MAC + CPU + SALT + HASH
-	char *mac = GetMacAddress();
-	PWSTR _hash = NULL;
-				
-	// Get stripped Username
-	// By convention USERNAME can come in the following formats:
-		//	USERNAME
-		//	USERNAME@DOMAIN
-		//	DOMAIN\USERNAME
-	PWSTR splitUser = u;//splitUsername(_rgFieldStrings[SFI_USERNAME]);
+	std::string KEY, URL; 
+
+	hr = GetKeyValue("sec-pol-key", KEY);
+	if(!SUCCEEDED(hr))
+		return hr;
+	hr = GetKeyValue("url", URL);
+	if(!SUCCEEDED(hr))
+		return hr;
+		
 	PWSTR splitDomain = NULL;
 	
-	wchar_t c[80], b[80];
-	MultiByteToWideChar(CP_ACP, 0, _url, -1, c, 80);
-	MultiByteToWideChar(CP_ACP, 0, _key, -1, b, 80);
-		
 	// Build HTTP Post
-	DWORD *_httpResult = NULL;
+	DWORD *_httpResult = NULL;	
 	DWORD _flag = 0x0; // Initial login
 	// _flag = 0x1; // Resend
 	// _flag = 0x2; // Verify
@@ -1295,18 +1438,35 @@ HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
 	LPSTR _serverResponse;
 
 	// Name of the Application making the HTTP call, can be anything really at this point
-	LPSTR pszUserAgent = "Apersona Windows Client";
+	LPSTR pszUserAgent = "Apersona Windows 7 Client";
 
 	// URL or IP address of the HTTP server you're posting to
-	LPSTR pszServer = "rdu-kv.apersona.com"; 
-
+	LPSTR pszServer;// = "rdu-kv.apersona.com"; 	
+	size_t len = URL.length();
+	pszServer = new char[len+1];
+	URL._Copy_s(pszServer,len,len);
+	pszServer[len]='\0';
+	
+	LPSTR pszKey;
+	len = KEY.length();
+	pszKey = new char[len+1];
+	KEY._Copy_s(pszKey, len, len);
+	pszKey[len] = '\0';
+	
 	// Initial PATH
 	LPSTR pszPath;
 	DWORD _otpflag;
+	int OTPF = 0;
+	std::string _s;
+	hr = GetKeyValue("otpm", _s);//int OTPF = stoi(GetConfigOpt("C:\\Program Files (x86)\\aPersona\\config.txt", "otpmethod"));
+	if(!SUCCEEDED(hr))
+		return hr;
+	OTPF = std::stoi(_s);
+	_otpflag = OTPF;
 	if(wcslen(OTP) == 0)//(OTP == NULL)
 	{
 		pszPath = "/apkv/extAuthenticate.kv";
-		_otpflag = 0x0;
+		////_otpflag = 0x0;
 		_flag = 0;
 	}
 	else
@@ -1319,31 +1479,33 @@ HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
 	//DWORD _otpflag = 0x0; // ignore
 	// _otpflag = 0x1; // SMS
 	// _otpflag = 0x2; // Voicemail
-
-	/** !! Must be read in from USER -- Dialog box **/
-	//PWSTR _otpcode = "1234"; // OTP code that is sent by server if initial Auth fails or something
-		
+			
 	// Build initial Authentication POST string
-	std::string pszPostData = buildHttpPostString(u, p, _key, _flag, _otpflag, OTP);
-	std::ofstream o;
-	o.open("C:\\Temp\\http_param.txt", std::ios::out | std::ios::app );
-	o << pszPostData;
-	o.close();
+	std::string pszPostData;
+	hr = buildHttpPostString(u, p, pszKey, _flag, _otpflag, OTP, pszPostData );
+	//if(pszPostData.empty())
+	//	return E_INVALIDARG;
+	if(!SUCCEEDED(hr))
+		return hr;
+	
 	// Convert string to char*
 	char *_parmsc = new char[pszPostData.length()+1];
 	strcpy(_parmsc, pszPostData.c_str());
 
-	// Post string to Server
-	_serverResponse = apersonaHttpPost(pszUserAgent, pszServer, pszPath, _parmsc);
-	delete []_parmsc;
-	o.open("C:\\Temp\\http_response.txt", std::ios::out | std::ios::app );
-	o << _serverResponse << "\n";
-	o << pszServer << " " << pszPath << " " << _parmsc << "\n";
-	o.close();
-	/**
-		WE ARE CURRENTLY RIGHT HERE!!!::: 
-	**/
+	// Read the port number
+	int pszPort;
+	std::string _sport;
+	hr = GetKeyValue("port", _sport);
+	if(!SUCCEEDED(hr))
+		return E_INVALIDARG;
+	pszPort = std::stoi(_sport);
 
+	// Post string to Server
+	hr = apersonaHttpPost(pszUserAgent, pszServer, pszPath, pszPort, _parmsc, _serverResponse);
+	if(!SUCCEEDED(hr))
+		return hr;
+	delete []_parmsc;
+	
 	// Parse Response -- code, message, info, identifier
 	std::vector<std::string> _parsedResponse = split_string(_serverResponse, ",");
 	if(!_parsedResponse.empty())
@@ -1351,7 +1513,16 @@ HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
 		int code = stoi(_parsedResponse.at(0).substr(_parsedResponse.at(0).find(":")+1));
 		std::string info = _parsedResponse.at(2).substr(_parsedResponse.at(2).find(":")+1);
 		std::string message = _parsedResponse.at(1).substr(_parsedResponse.at(1).find(":")+1);
+		std::string identifier = _parsedResponse.at(3).substr(_parsedResponse.at(3).find(":")+2);
+		identifier.pop_back();
+		identifier.pop_back();
 
+		std::string scramEmail, scramPhone;
+		scramEmail = ScrambleString(_pszEmail);
+		if(_otpflag == 1)
+			scramPhone = ScrambleString(_pszSMSPhone);
+		if(_otpflag == 2)
+			scramPhone = ScrambleString(_pszVoicePhone);
 		switch(code)
 			{
 				case 403: // invalid API license
@@ -1359,29 +1530,72 @@ HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
 					return E_INVALIDARG;
 					break;
 				case 200: // ok -- EXIT to WINDOWS AUTHENTICATION
-					// Set APersona Identifier in registry
-					::MessageBox(NULL, info.c_str(), message.c_str(), 0);
-					// Display message
-					return S_OK;
-					break;
+					{
+						// Store the one time transaction key in the registry
+						HKEY hApersonaKey;
+						HRESULT hr = RegOpenKeyEx(HKEY_LOCAL_MACHINE, "SOFTWARE\\APersona\\one-time-trans-key", 0, KEY_ALL_ACCESS, &hApersonaKey);
+						LPCTSTR value = TEXT("one-time-trans-key");
+						LPCTSTR data = identifier.c_str();
+						hr = RegSetValueEx (hApersonaKey, value, 0, REG_SZ, (LPBYTE)data, strlen(data)+1);
+						
+						return S_OK;
+						break;
+					}
 				case 404: // error -- Some kind of error
 					::MessageBox(NULL, info.c_str(), message.c_str(), 0);
 					return E_ABORT;
 					break;
 				case 401: // otp timeout -- flag = 1(resend)
 					{
+						std::string otp = "Your login requires verification. A One Time Passcode has been";
+						if(_otpflag == 0){
+							otp.append(" Emailed to you at:\n");
+							otp.append(scramEmail);
+						}
+						else if(_otpflag == 1){
+							otp.append(" Texted to you at:\n");
+							otp.append(scramPhone);
+						}
+						else if(_otpflag == 2){
+							otp.append(" Called to you at:\n");
+							otp.append(scramPhone);
+						}
+						otp.append("\nPlease retrieve the Passcode and enter it to complete authentication.");
+						::MessageBox(NULL, otp.c_str(), message.c_str(), 0);//::MessageBox(NULL, info.c_str(), message.c_str(), 0);
+						return E_ACCESSDENIED;
+						break;
+					}
+				case 500:
+					{
 						::MessageBox(NULL, info.c_str(), message.c_str(), 0);
 						return E_INVALIDARG;
 						break;
 					}
-				case 202: // otp invalid, email sent with otp -- flag = 2(verify)
-					::MessageBox(NULL, info.c_str(), message.c_str(), 0);
-					return E_INVALIDARG;
-					break;
+				case 202:
+					{
+						// otp invalid, email sent with otp -- flag = 2(verify)
+						std::string otp = "Your login requires verification. A One Time Passcode has been";
+						if(_otpflag == 0){
+							otp.append(" Emailed to you at:\n");
+							otp.append(scramEmail);
+						}
+						else if(_otpflag == 1){
+							otp.append(" Texted to you at:\n");
+							otp.append(scramPhone);
+						}
+						else if(_otpflag == 2){
+							otp.append(" Called to you at:\n");
+							otp.append(scramPhone);
+						}
+						otp.append("\nPlease retrieve the Passcode and enter it to complete authentication.");
+						::MessageBox(NULL, otp.c_str(), message.c_str(), 0);//::MessageBox(NULL, info.c_str(), message.c_str(), 0);
+						return E_ACCESSDENIED;
+						break;
+					}
 				default:
 					return E_ABORT;
 					break;
-			}
+			}			
 	}
 	
 	//return hr;
@@ -1412,11 +1626,7 @@ HRESULT CSampleCredential::GetSerialization(
 	UNREFERENCED_PARAMETER(pcpsiOptionalStatusIcon);
 
 	HRESULT hr;
-	if(_pszOTP != NULL)
-		OutputWrite(_pszOTP);
-	else
-		OutputWrite(L"OTP still null");
-
+	
 	// Local computer name
 	WCHAR wsz[MAX_COMPUTERNAME_LENGTH+1];
 	DWORD cch = ARRAYSIZE(wsz);
@@ -1425,115 +1635,63 @@ HRESULT CSampleCredential::GetSerialization(
 	WCHAR wszDomain[MAX_PATH] = {0};	
 	DWORD bufSize = MAX_PATH;
 
-	// If we are to log in locally or on the network
-	BOOL _localLogin = true;
-	//OutputWrite(L"I'm here");
-
-	// DWORD value, if TRUE then skip aPersona authentication, default should be true
-	DWORD _bypassAPersona = 1;
-	HKEY _hk = OpenKey(HKEY_LOCAL_MACHINE, "SOFTWARE\\aPersona\\aPersona local authentication only");
-	//OutputWrite(L"I'm here");
-	if(_hk == NULL)
+	// Local -- if either no network OR user requested domain is LOCALHOST
+	if(_pDomainName == NULL)
+		_pDomainName = GetDomain();//OutputWrite(L"DOMAIN NULL");
+	if( isLocal(_pDomainName) )
 	{
-		OutputWrite(L"hk NULL");
-		_bypassAPersona = 1;
-		::MessageBox(NULL, "local was NULL", "aPersona Error", 0);
-	}
-	else
-	{
-		OutputWrite(L"hk NOT NULL");
-		_bypassAPersona = GetRegDwordVal(_hk, "use");
-		//::MessageBox(NULL, "local not NULL", "aPersona Error", 0);
-		OutputWrite(L"made it");
-	}
-	if(_bypassAPersona == NULL)
-	{
-		OutputWrite(L"bypassApersona NULL");
-		_bypassAPersona = 1;
-		::MessageBox(NULL, "bypass is NULL", "aPersona Error", 0);
-	}
-	OutputWrite(L"I'm here");
-	//OutputWrite((PWSTR)_bypassAPersona);
-	/***
-	 FLOW
-	 -		aPersona				not apersona
-	 -local		-domain			local		domain
-	 ***/
-	_bypassAPersona = false;
-	// SKIP APERSONA
-	if(_bypassAPersona)
-	{
-		// Local -- if either no network OR user requested domain is LOCALHOST
-		if(_pDomainName == NULL)
-			_pDomainName = GetDomain();//OutputWrite(L"DOMAIN NULL");
-		if( isLocal(_pDomainName) )
+		if (GetComputerNameW(wsz, &cch))
 		{
-			if (GetComputerNameW(wsz, &cch))
+			PWSTR pwzProtectedPassword;
+			hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
+
+			if (SUCCEEDED(hr))
 			{
-				PWSTR pwzProtectedPassword;
-
-				hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
-
+				KERB_INTERACTIVE_UNLOCK_LOGON kiul;
+					
+				// Initialize kiul with weak references to our credential.			
+				hr = KerbInteractiveUnlockLogonInit(wsz, splitUsername( _rgFieldStrings[SFI_USERNAME] ), pwzProtectedPassword, _cpus, &kiul);	
 				if (SUCCEEDED(hr))
 				{
-					KERB_INTERACTIVE_UNLOCK_LOGON kiul;
-				/*
-				//get handle
-				HWND hwndOwner = NULL;
-
-				if (_pCredProvCredentialEvents)
-				{
-					_pCredProvCredentialEvents->OnCreatingWindow(&hwndOwner);
-				}
-
-				//initialize Progress Dialog
-				IProgressDialog * ppd;
-				CoCreateInstance(CLSID_ProgressDialog, NULL, CLSCTX_INPROC_SERVER, 
-					IID_IProgressDialog, (void **)&ppd);
-
-				//calls function to get data about the user
-				//EnumerateUserInfo(_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_USERNAME],hwndOwner,ppd);
-
-				*/
-				//hr = S_OK;
-				
-					// Initialize kiul with weak references to our credential.			
-					hr = KerbInteractiveUnlockLogonInit(wsz, splitUsername( _rgFieldStrings[SFI_USERNAME] ), pwzProtectedPassword, _cpus, &kiul);	
+					// We use KERB_INTERACTIVE_UNLOCK_LOGON in both unlock and logon scenarios.  It contains a
+					// KERB_INTERACTIVE_LOGON to hold the creds plus a LUID that is filled in for us by Winlogon
+					// as necessary.
+					hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);					
 					if (SUCCEEDED(hr))
 					{
-						// We use KERB_INTERACTIVE_UNLOCK_LOGON in both unlock and logon scenarios.  It contains a
-						// KERB_INTERACTIVE_LOGON to hold the creds plus a LUID that is filled in for us by Winlogon
-						// as necessary.
-						hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);					
+						ULONG ulAuthPackage;
+						hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);						
 						if (SUCCEEDED(hr))
 						{
-							ULONG ulAuthPackage;
-							hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);						
-							if (SUCCEEDED(hr))
-							{
-								pcpcs->ulAuthenticationPackage = ulAuthPackage;
-								pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
+							pcpcs->ulAuthenticationPackage = ulAuthPackage;
+							pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
 													
-								// At this point the credential has created the serialized credential used for logon
-								// By setting this to CPGSR_RETURN_CREDENTIAL_FINISHED we are letting logonUI know
-								// that we have all the information we need and it should attempt to submit the 
-								// serialized credential.
-								*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;								
-							}
+							// At this point the credential has created the serialized credential used for logon
+							// By setting this to CPGSR_RETURN_CREDENTIAL_FINISHED we are letting logonUI know
+							// that we have all the information we need and it should attempt to submit the 
+							// serialized credential.
+							*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;								
 						}
 					}
-					CoTaskMemFree(pwzProtectedPassword);				
 				}
-			}
-			else
-			{
-				DWORD dwErr = GetLastError();
-				hr = HRESULT_FROM_WIN32(dwErr);			
+				CoTaskMemFree(pwzProtectedPassword);				
 			}
 		}
-		// Domain -- if network AND user has not requested LOCALHOST
 		else
 		{
+			DWORD dwErr = GetLastError();
+			hr = HRESULT_FROM_WIN32(dwErr);			
+		}
+		return hr; // needed?
+	}
+	// Domain -- if network AND user has not requested LOCALHOST
+	else
+	{
+		PWSTR splitUser = splitUsername(_rgFieldStrings[SFI_USERNAME]);
+		HRESULT hr = funcHandle(splitUser,_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_OTP]);						
+		if(SUCCEEDED(hr))
+		{
+			// aPersona passed, so authenticate against the chosen domain (or default)
 			if(GetComputerNameExW(ComputerNameDnsDomain, wszDomain, &bufSize))
 			{
 				DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
@@ -1549,13 +1707,11 @@ HRESULT CSampleCredential::GetSerialization(
 				DsRoleFreeMemory(info);
 				
 				PWSTR pwzProtectedPassword;
-
 				hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);			
 				if (SUCCEEDED(hr))
 				{
 					KERB_INTERACTIVE_UNLOCK_LOGON kiul;						
 					
-					PWSTR splitUser = splitUsername(_rgFieldStrings[SFI_USERNAME]);
 					hr = KerbInteractiveUnlockLogonInit(splitDomain, splitUser, pwzProtectedPassword, _cpus, &kiul);
 			
 					if (SUCCEEDED(hr))
@@ -1585,138 +1741,15 @@ HRESULT CSampleCredential::GetSerialization(
 				hr = HRESULT_FROM_WIN32(dwErr);
 			}
 		}
-	}
-	else
-	{
-		OutputWrite(L"YES APERSONA");
-		if(_pDomainName == NULL)
-			_pDomainName = GetDomain();//OutputWrite(L"DOMAIN NULL");
-		// Local -- if either no network OR user requested domain is LOCALHOST
-		if( isLocal(_pDomainName) )
-		{	
-			OutputWrite(L"local");
-			HRESULT hr = funcHandle(_rgFieldStrings[SFI_USERNAME],_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_OTP]);
-			if(SUCCEEDED(hr))
-			{
-				// aPersona passed, so authenticate locally
-				if (GetComputerNameW(wsz, &cch))
-				{
-					PWSTR pwzProtectedPassword;
-
-					hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
-
-					if (SUCCEEDED(hr))
-					{
-						KERB_INTERACTIVE_UNLOCK_LOGON kiul;
-								
-					// Initialize kiul with weak references to our credential.			
-						hr = KerbInteractiveUnlockLogonInit(wsz, splitUsername( _rgFieldStrings[SFI_USERNAME] ), pwzProtectedPassword, _cpus, &kiul);	
-						if (SUCCEEDED(hr))
-						{
-							// We use KERB_INTERACTIVE_UNLOCK_LOGON in both unlock and logon scenarios.  It contains a
-							// KERB_INTERACTIVE_LOGON to hold the creds plus a LUID that is filled in for us by Winlogon
-							// as necessary.
-							hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);					
-							if (SUCCEEDED(hr))
-							{
-								ULONG ulAuthPackage;
-								hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);						
-								if (SUCCEEDED(hr))
-								{
-									pcpcs->ulAuthenticationPackage = ulAuthPackage;
-									pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
-														
-									// At this point the credential has created the serialized credential used for logon
-									// By setting this to CPGSR_RETURN_CREDENTIAL_FINISHED we are letting logonUI know
-									// that we have all the information we need and it should attempt to submit the 
-									// serialized credential.
-									*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;								
-								}
-							}
-						}
-						CoTaskMemFree(pwzProtectedPassword);				
-					}
-				}
-				else
-				{
-					DWORD dwErr = GetLastError();
-					hr = HRESULT_FROM_WIN32(dwErr);			
-				}
-			}
-			else
-			{
-				// TODO::: 
-				// deal with aPersona authentication failures here?
-			}
-		}
-		// Domain -- if network AND user has not requested LOCALHOST
 		else
-		{			
-			HRESULT hr = funcHandle(_rgFieldStrings[SFI_USERNAME],_rgFieldStrings[SFI_PASSWORD], _rgFieldStrings[SFI_OTP]);
-			
-			if(SUCCEEDED(hr))
-			{
-				// aPersona passed, so authenticate against the chosen domain (or default)
-				if(GetComputerNameExW(ComputerNameDnsDomain, wszDomain, &bufSize))
-				{
-					DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
-					DWORD dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
-					dw = DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&info);
-					PWSTR splitDomain = NULL;
-					if(info->DomainNameFlat != NULL)
-					{
-						splitDomain = info->DomainNameFlat;
-					}			
-					
-					// Free up the memory from domain query
-					DsRoleFreeMemory(info);
-					
-					PWSTR pwzProtectedPassword;
-	
-					hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);			
-					if (SUCCEEDED(hr))
-					{
-						KERB_INTERACTIVE_UNLOCK_LOGON kiul;						
-						
-						PWSTR splitUser = splitUsername(_rgFieldStrings[SFI_USERNAME]);
-						hr = KerbInteractiveUnlockLogonInit(splitDomain, splitUser, pwzProtectedPassword, _cpus, &kiul);
-				
-						if (SUCCEEDED(hr))
-						{
-							hr = KerbInteractiveUnlockLogonPack(kiul, &pcpcs->rgbSerialization, &pcpcs->cbSerialization);
-						
-							if (SUCCEEDED(hr))
-							{
-								ULONG ulAuthPackage;
-								hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);
-							
-								if (SUCCEEDED(hr))
-								{
-									pcpcs->ulAuthenticationPackage = ulAuthPackage;
-									pcpcs->clsidCredentialProvider = CLSID_CSampleProvider;
-														
-									*pcpgsr = CPGSR_RETURN_CREDENTIAL_FINISHED;
-								}						
-							}					
-						}					
-						CoTaskMemFree(pwzProtectedPassword);
-					}						
-				}
-				else
-				{
-					DWORD dwErr = GetLastError();
-					hr = HRESULT_FROM_WIN32(dwErr);
-				}
-			}
-			else
-			{
-				// TODO::: 
-				// deal with aPersona authentication failures here?
-			}
+		{
+			// TODO::: 
+			// deal with aPersona authentication failures here?
+			if(hr == E_INVALIDARG)
+				::MessageBoxA(NULL, "There was a problem validating your account.  Please contact your System Administrator.", "APersona Message", 0);
+			return hr;
 		}
-	}		
-		
-	// return result
+	}	
 	return hr;
 }
 struct REPORT_RESULT_STATUS_INFO

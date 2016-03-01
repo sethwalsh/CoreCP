@@ -65,7 +65,7 @@ static const CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR s_rgCredProvFieldDescriptors[]
     { SFI_TILEIMAGE, CPFT_TILE_IMAGE, L"Image" },
 	{ SFI_USERNAME, CPFT_EDIT_TEXT, L"Username" },
 	{ SFI_PASSWORD, CPFT_PASSWORD_TEXT, L"Password" },
-	{ SFI_OTP, CPFT_EDIT_TEXT, L"OTP" },
+	{ SFI_OTP, CPFT_EDIT_TEXT, L"Enter One Time Passcode if Prompted" },
     { SFI_SUBMIT_BUTTON, CPFT_SUBMIT_BUTTON, L"Submit" },
 	{ SFI_DOMAIN, CPFT_SMALL_TEXT, L"Domain" },
 };

@@ -1165,7 +1165,7 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 	{
 		char buf[33];
 		sprintf(buf, "%d", domainOTPFlag);
-		::MessageBoxA(NULL, buf, "blah1", 0);
+		
 		if(domainOTPFlag == 1)//if(_otpflag == 1) // SMS
 		{
 			_DATA.append("&otpm=s");
@@ -1505,6 +1505,14 @@ HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
 	if(!SUCCEEDED(hr))
 		return hr;
 	delete []_parmsc;
+
+	// The Domain may have changed the OTP Method in the registry so get the new flag
+	OTPF = 0;	
+	hr = GetKeyValue("otpm", _s);//int OTPF = stoi(GetConfigOpt("C:\\Program Files (x86)\\aPersona\\config.txt", "otpmethod"));
+	if(!SUCCEEDED(hr))
+		return hr;
+	OTPF = std::stoi(_s);
+	_otpflag = OTPF;
 	
 	// Parse Response -- code, message, info, identifier
 	std::vector<std::string> _parsedResponse = split_string(_serverResponse, ",");

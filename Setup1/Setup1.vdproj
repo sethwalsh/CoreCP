@@ -51,12 +51,6 @@
         }
         "Entry"
         {
-        "MsmKey" = "8:_6C1EDF9308D644719DB86A267BC648A8"
-        "OwnerKey" = "8:_AC2921E130BA4956B8D6D87767B11B3B"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
         "MsmKey" = "8:_77EEA3F43310445295C68DC56818B89C"
         "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
@@ -83,6 +77,12 @@
         {
         "MsmKey" = "8:_BEF60AF1B5C04E1D97A6BD46DC384174"
         "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_C7E7E16BF83F4523982496EE88D2F103"
+        "OwnerKey" = "8:_AC2921E130BA4956B8D6D87767B11B3B"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -495,20 +495,20 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:aPersona Credential Provider"
         "ProductCode" = "8:{0D5CDB03-426A-4804-AF65-84ECFC3F6AB5}"
-        "PackageCode" = "8:{6E390C01-6BCC-4FEC-A7CC-D068DFB4E8E2}"
+        "PackageCode" = "8:{6505D7D3-E0ED-4B20-913E-1800F2126E7C}"
         "UpgradeCode" = "8:{C324F241-769A-444B-A139-0DBED8BDB16F}"
         "AspNetVersion" = "8:4.0.30319.0"
         "RestartWWWService" = "11:FALSE"
-        "RemovePreviousVersions" = "11:FALSE"
+        "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:FALSE"
         "ProductVersion" = "8:1.0.0"
         "Manufacturer" = "8:APersona"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
-        "Title" = "8:Setup1"
+        "Title" = "8:APersona Installer"
         "Subject" = "8:"
-        "ARPCONTACT" = "8:Default Company Name"
+        "ARPCONTACT" = "8:APersona"
         "Keywords" = "8:"
         "ARPCOMMENTS" = "8:"
         "ARPURLINFOABOUT" = "8:"
@@ -937,7 +937,7 @@
             "Attributes" = "3:3"
                 "Dialogs"
                 {
-                    "{688940B3-5CA9-4162-8DEE-2993FA9D8CBC}:_B18ABA8AAE3D42AB9A01C144C81F13A6"
+                    "{688940B3-5CA9-4162-8DEE-2993FA9D8CBC}:_1A2477CF3DC54FE189E2C3A3990B7AB5"
                     {
                     "Sequence" = "3:100"
                     "DisplayName" = "8:Finished"
@@ -954,7 +954,8 @@
                             "Type" = "3:8"
                             "ContextData" = "8:Bitmap"
                             "Attributes" = "3:4"
-                            "Setting" = "3:1"
+                            "Setting" = "3:2"
+                            "Value" = "8:_A67DF44F85A64493880AF0B1446629B7"
                             "UsePlugInResources" = "11:TRUE"
                             }
                         }
@@ -1151,7 +1152,7 @@
                             "ContextData" = "8:"
                             "Attributes" = "3:0"
                             "Setting" = "3:2"
-                            "Value" = "8:Security Policy License Key"
+                            "Value" = "8:"
                             "DefaultValue" = "8:#1214"
                             "UsePlugInResources" = "11:TRUE"
                             }
@@ -1378,55 +1379,6 @@
                             }
                         }
                     }
-                    "{688940B3-5CA9-4162-8DEE-2993FA9D8CBC}:_668166FC70844952863AC464E4BE6DFC"
-                    {
-                    "Sequence" = "3:100"
-                    "DisplayName" = "8:Welcome"
-                    "UseDynamicProperties" = "11:TRUE"
-                    "IsDependency" = "11:FALSE"
-                    "SourcePath" = "8:<VsdDialogDir>\\VsdWelcomeDlgB.wid"
-                        "Properties"
-                        {
-                            "BannerBitmap"
-                            {
-                            "Name" = "8:BannerBitmap"
-                            "DisplayName" = "8:#1001"
-                            "Description" = "8:#1101"
-                            "Type" = "3:8"
-                            "ContextData" = "8:Bitmap"
-                            "Attributes" = "3:4"
-                            "Setting" = "3:2"
-                            "Value" = "8:_A67DF44F85A64493880AF0B1446629B7"
-                            "UsePlugInResources" = "11:TRUE"
-                            }
-                            "CopyrightWarning"
-                            {
-                            "Name" = "8:CopyrightWarning"
-                            "DisplayName" = "8:#1002"
-                            "Description" = "8:#1102"
-                            "Type" = "3:3"
-                            "ContextData" = "8:"
-                            "Attributes" = "3:0"
-                            "Setting" = "3:2"
-                            "Value" = "8:"
-                            "DefaultValue" = "8:#1202"
-                            "UsePlugInResources" = "11:TRUE"
-                            }
-                            "Welcome"
-                            {
-                            "Name" = "8:Welcome"
-                            "DisplayName" = "8:#1003"
-                            "Description" = "8:#1103"
-                            "Type" = "3:3"
-                            "ContextData" = "8:"
-                            "Attributes" = "3:0"
-                            "Setting" = "3:1"
-                            "Value" = "8:#1203"
-                            "DefaultValue" = "8:#1203"
-                            "UsePlugInResources" = "11:TRUE"
-                            }
-                        }
-                    }
                     "{688940B3-5CA9-4162-8DEE-2993FA9D8CBC}:_6C276696F56743F99DC5CF6DAC641BAA"
                     {
                     "Sequence" = "3:400"
@@ -1470,7 +1422,7 @@
                             "ContextData" = "8:"
                             "Attributes" = "3:0"
                             "Setting" = "3:2"
-                            "Value" = "8:Enter the aPersona URL"
+                            "Value" = "8:Enter the aPersona URL and Port number below"
                             "DefaultValue" = "8:#1215"
                             "UsePlugInResources" = "11:TRUE"
                             }
@@ -1684,7 +1636,56 @@
                             }
                         }
                     }
-                    "{688940B3-5CA9-4162-8DEE-2993FA9D8CBC}:_E987619949EF4E829D215B8F57533AA2"
+                    "{688940B3-5CA9-4162-8DEE-2993FA9D8CBC}:_855F2FC28FFB4B15A2B27BBCED8554C0"
+                    {
+                    "Sequence" = "3:100"
+                    "DisplayName" = "8:Welcome"
+                    "UseDynamicProperties" = "11:TRUE"
+                    "IsDependency" = "11:FALSE"
+                    "SourcePath" = "8:<VsdDialogDir>\\VsdWelcomeDlgB.wid"
+                        "Properties"
+                        {
+                            "BannerBitmap"
+                            {
+                            "Name" = "8:BannerBitmap"
+                            "DisplayName" = "8:#1001"
+                            "Description" = "8:#1101"
+                            "Type" = "3:8"
+                            "ContextData" = "8:Bitmap"
+                            "Attributes" = "3:4"
+                            "Setting" = "3:2"
+                            "Value" = "8:_A67DF44F85A64493880AF0B1446629B7"
+                            "UsePlugInResources" = "11:TRUE"
+                            }
+                            "CopyrightWarning"
+                            {
+                            "Name" = "8:CopyrightWarning"
+                            "DisplayName" = "8:#1002"
+                            "Description" = "8:#1102"
+                            "Type" = "3:3"
+                            "ContextData" = "8:"
+                            "Attributes" = "3:0"
+                            "Setting" = "3:2"
+                            "Value" = "8:"
+                            "DefaultValue" = "8:#1202"
+                            "UsePlugInResources" = "11:TRUE"
+                            }
+                            "Welcome"
+                            {
+                            "Name" = "8:Welcome"
+                            "DisplayName" = "8:#1003"
+                            "Description" = "8:#1103"
+                            "Type" = "3:3"
+                            "ContextData" = "8:"
+                            "Attributes" = "3:0"
+                            "Setting" = "3:2"
+                            "Value" = "8:"
+                            "DefaultValue" = "8:#1203"
+                            "UsePlugInResources" = "11:TRUE"
+                            }
+                        }
+                    }
+                    "{688940B3-5CA9-4162-8DEE-2993FA9D8CBC}:_C8CD5B75C623446383C0F839ECF8847B"
                     {
                     "Sequence" = "3:500"
                     "DisplayName" = "8:Confirm Installation"
@@ -1817,7 +1818,7 @@
             "Attributes" = "3:3"
                 "Dialogs"
                 {
-                    "{688940B3-5CA9-4162-8DEE-2993FA9D8CBC}:_CFCACB20F4A94300B49AA43EA9A4CD58"
+                    "{688940B3-5CA9-4162-8DEE-2993FA9D8CBC}:_5D4E9F47E55349E18D5C11A005023213"
                     {
                     "Sequence" = "3:100"
                     "DisplayName" = "8:Finished"
@@ -1960,7 +1961,7 @@
         }
         "MergeModule"
         {
-            "{CEE29DC0-9FBA-4B99-8D47-5BC643D9B626}:_6C1EDF9308D644719DB86A267BC648A8"
+            "{CEE29DC0-9FBA-4B99-8D47-5BC643D9B626}:_C7E7E16BF83F4523982496EE88D2F103"
             {
             "UseDynamicProperties" = "11:TRUE"
             "IsDependency" = "11:TRUE"

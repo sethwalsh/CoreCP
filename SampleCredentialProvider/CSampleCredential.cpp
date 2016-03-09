@@ -7,6 +7,11 @@
 // Copyright (c) 2006 Microsoft Corporation. All rights reserved.
 //
 //
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
+
+#define WIN32_LEAN_AND_MEAN
 
 #ifndef WIN32_NO_STATUS
 #include <ntstatus.h>
@@ -35,7 +40,7 @@
 
 //for dialogbox
 #include <WinUser.h>
-#include <Windows.h>
+//#include <Windows.h>
 
 //progressdialogbox
 #include <Shlobj.h>
@@ -44,18 +49,101 @@
 #include <winhttp.h>
 
 //mac addr fetching
+#include <winsock2.h>
 #include <Iphlpapi.h>
 
 //for sha1
 #include <WinCrypt.h>
 
+// for windows versions
+//#include <VersionHelper.h> /* For windows 8 and above*/
+
 //generating hash
 #include "sha1.h"
 #include <time.h>
-#include <WinCrypt.h>
+//#include <WinCrypt.h>
 #include <sstream>
 
 #include <fstream>
+
+#include <winsock2.h>
+#include <iphlpapi.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "iphlpapi.lib")
+
+std::string get_adapter(PIP_ADAPTER_ADDRESSES aa)
+{
+	char buf[BUFSIZ];
+	memset(buf, 0, BUFSIZ);
+	WideCharToMultiByte(CP_ACP, 0, aa->FriendlyName, wcslen(aa->FriendlyName), buf, BUFSIZ, NULL, NULL);
+	std::string adapter_name(buf);
+	//printf("adapter_name:%s\n", buf);
+	return adapter_name;
+}
+std::string get_addr(PIP_ADAPTER_UNICAST_ADDRESS ua)
+{
+	char buf[BUFSIZ];
+
+	int family = ua->Address.lpSockaddr->sa_family;
+	if(family == 2)
+	{	
+		memset(buf, 0, BUFSIZ);
+		getnameinfo(ua->Address.lpSockaddr, ua->Address.iSockaddrLength, buf, sizeof(buf), NULL, 0,NI_NUMERICHOST);
+	//printf("%s\n", buf);
+		std::string address(buf);
+		return address;
+	}
+	return "";
+}
+
+std::string get_ipaddress()
+{
+	DWORD rv, size;
+	PIP_ADAPTER_ADDRESSES adapter_addresses, aa;
+	PIP_ADAPTER_UNICAST_ADDRESS ua;
+
+	rv = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, NULL, &size);
+	if (rv != ERROR_BUFFER_OVERFLOW) {
+		//fprintf(stderr, "GetAdaptersAddresses() failed...");
+		return "";
+	}
+	adapter_addresses = (PIP_ADAPTER_ADDRESSES)malloc(size);
+
+	rv = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, adapter_addresses, &size);
+	if (rv != ERROR_SUCCESS) {
+		//fprintf(stderr, "GetAdaptersAddresses() failed...");
+		free(adapter_addresses);
+		return "";
+	}
+	std::string ADDRESS = "";
+	for (aa = adapter_addresses; aa != NULL; aa = aa->Next) {
+		std::string adapter = get_adapter(aa);
+		if(adapter.compare("Local Area Connection") == 0){
+			for (ua = aa->FirstUnicastAddress; ua != NULL; ua = ua->Next) {
+				int family = ua->Address.lpSockaddr->sa_family;
+				if(family == 2)
+				{
+					std::string address = get_addr(ua);
+					return address;
+				}				
+			}
+		}
+		if(adapter.compare("Wireless Network Connection") == 0){
+			for (ua = aa->FirstUnicastAddress; ua != NULL; ua = ua->Next) {
+				int family = ua->Address.lpSockaddr->sa_family;
+				if(family == 2)
+				{
+					std::string address = get_addr(ua);
+					return address;
+				}				
+			}
+		}
+	}
+
+	free(adapter_addresses);
+	return "";
+}
 
 std::string _pszEmail, _pszVoicePhone, _pszSMSPhone;
 std::string GetConfigOpt(std::string file, std::string key)
@@ -107,32 +195,27 @@ std::string ws2s(const std::wstring& s)
     delete[] buf;
     return r;
 }
-/*
-void DebugWrite(_com_error e)
-{	
-	FILE* f;
-	f = _wfopen( L"C:\\Temp\\DEBUG.txt", L"a");
-	if(f != NULL){ 
-		fwrite(e.ErrorMessage(), sizeof(TCHAR), strlen(e.ErrorMessage()), f);
-		//fwrite( e.ErrorMessage(), sizeof(WCHAR), wcslen(e.ErrorMessage().c_str()), f);
-		fwrite( L"\n", sizeof(WCHAR), wcslen(L"\n"), f);
-		fwrite( L"----------\n", sizeof(WCHAR), wcslen(L"----------\n"), f);
-		fclose(f);
-	}
+
+// Log any errors to our log file
+void log_text_to_file(const std::string &EXTRA_MESSAGE, HRESULT hr)
+{
+	time_t t = time(NULL);
+	char buffer[80];
+	struct tm *timeinfo = localtime(&t);
+	strftime(buffer, 80, "%c", timeinfo);
+
+	std::string line;
+	line.append(buffer);
+	line.append("    ");
+	line.append("aPersona Message: " + EXTRA_MESSAGE);
+	line.append("    SYSTEM Error: ");	
+	line.append(_com_error(hr).ErrorMessage());
+	
+	std::ofstream log_file("C:\\Program Files (x86)\\APersona\\aPersona Adaptive Multi-Factor Credential Provider v1.1.9 (x64) Setup\\log.txt", std::ios_base::out | std::ios_base::app);
+
+	log_file << line << std::endl;
 }
 
-void OutputWrite(PWSTR s)
-{
-	FILE* f;
-	f = _wfopen( L"C:\\Temp\\G_out.txt", L"a");
-	if(f != NULL){ 
-		fwrite( s, sizeof(WCHAR), wcslen(s), f);
-		fwrite( L"\n", sizeof(WCHAR), wcslen(L"\n"), f);
-		fwrite( L"----------\n", sizeof(WCHAR), wcslen(L"----------\n"), f);
-		fclose(f);
-	}
-}
-*/
 /*
 	Checks to see if the string argument (user chosen domain) is the local machine name.  If so then the
 	user has requested to authenticate locally and returns TRUE.
@@ -142,24 +225,21 @@ bool isLocal(PWSTR d)
 	WCHAR local[MAX_COMPUTERNAME_LENGTH+1];
 	DWORD cch = ARRAYSIZE(local);
 	GetComputerNameW(local, &cch);	
-	//OutputWrite(local);
-	//OutputWrite(d);
-
+	
 	if(d == NULL)
 		return false;	
 	if(wcslen(d) == 0)
 	{
-		//OutputWrite(L"zero");
-		//::MessageBoxA(NULL, "zero", "Local Login Error", 0);
 		return true;
 	}
 	if(wcscmp(d, local) == 0)
 	{
-		//::MessageBoxA(NULL, "equal", "Local Login Error", 0);
 		return true;
 	}
 	return false;
 }
+
+// Takes a PWSTR username from login and splits it into context and userid
 PWSTR splitUsername(PWSTR u)
 {
 	PWSTR splitUser = NULL, splitDomain = NULL;
@@ -191,6 +271,7 @@ char* GetMacAddress()
 	
 	if(AdapterInfo == NULL){
 		//TODO: error allocating memory, handle gracefully
+		log_text_to_file("Error allocating memory when getting MAC Address", NULL);
 	}
 
 	//call to getadapterinfo to get size for dwbuflen
@@ -220,7 +301,7 @@ char* GetMacAddress()
 	return mac_addr;
 }
 
-
+// Get the Domain name string
 LPWSTR GetDomain()
 {
 	DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
@@ -719,12 +800,14 @@ IADsUser* getIADsUser(PWSTR pw, PWSTR u, HRESULT& hr)
 		if(!SUCCEEDED(hr))
 		{
 			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
+			log_text_to_file("aPersona Active Directory Error", hr);
 			return NULL;
 		}
 		hr = pDSSearch->GetFirstRow(hSearch);
 		if(!SUCCEEDED(hr))
 		{
 			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
+			log_text_to_file("aPersona Active Directory Error", hr);
 			pDSSearch->Release();
 			return NULL;
 		}
@@ -733,6 +816,7 @@ IADsUser* getIADsUser(PWSTR pw, PWSTR u, HRESULT& hr)
 		if(!SUCCEEDED(hr))
 		{
 			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
+			log_text_to_file("aPersona Active Directory Error", hr);
 			pDSSearch->Release();
 			return NULL;
 		}
@@ -746,10 +830,13 @@ IADsUser* getIADsUser(PWSTR pw, PWSTR u, HRESULT& hr)
 		if(!SUCCEEDED(hr))
 		{
 			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
+			log_text_to_file("aPersona Active Directory Error", hr);
 			return NULL;
 		}		
 		return _user;
 	}	
+	else
+		log_text_to_file("aPersona Active Directory Error", hr);
 	return _user;
 }
 
@@ -784,12 +871,14 @@ DWORD GetKeyValueDword(std::string key)
 	if(!SUCCEEDED(hr))
 	{		
 		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
+		log_text_to_file("aPersona Registry Error", hr);
 		RegCloseKey(hApersonaKey);
 	}
 	hr = RegQueryValueEx(hApersonaKey, key.c_str(), NULL, &dwType, (LPBYTE)sConfigValue, &dwBufferSize);
 	if(!SUCCEEDED(hr))
 	{
 		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
+		log_text_to_file("aPersona Registry Error", hr);
 		RegCloseKey(hApersonaKey);
 	}
 	// Error check
@@ -828,6 +917,7 @@ HRESULT GetKeyValue(std::string key, std::string& value)
 			{
 				RegCloseKey(hApersonaKey);
 				value = "";
+				log_text_to_file("aPersona Registry Error reading key " + key, hr);
 				//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
 				return hr;
 			}
@@ -836,6 +926,7 @@ HRESULT GetKeyValue(std::string key, std::string& value)
 		{
 			RegCloseKey(hApersonaKey);
 			value = "";
+			log_text_to_file("aPersona Registry Error reading key " + key, hr);
 			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
 			return hr;
 		}
@@ -844,6 +935,7 @@ HRESULT GetKeyValue(std::string key, std::string& value)
 	{
 		RegCloseKey(hApersonaKey);
 		value = "";
+		log_text_to_file("aPersona Registry Error reading key " + key, hr);
 		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
 		return hr;
 	}	
@@ -869,6 +961,7 @@ std::string GetInstalledApps()
     if(RegOpenKeyEx(HKEY_LOCAL_MACHINE, sRoot, 0, KEY_READ, &hUninstKey) != ERROR_SUCCESS)
     {
 		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
+		//log_text_to_file("aPersona Registry Error reading list of installed applications", NULL);
         return "";
     }
 
@@ -885,6 +978,7 @@ std::string GetInstalledApps()
             {
                 RegCloseKey(hAppKey);
                 RegCloseKey(hUninstKey);
+				//log_text_to_file("aPersona Registry Error reading list of installed applications", NULL);
                 return "";
             }
 
@@ -948,6 +1042,102 @@ enum HashType
 {
   HashSha1, HashMd5, HashSha256
 };
+std::string GetTable()
+{
+	PMIB_TCPTABLE pTcpTable = (MIB_TCPTABLE*)malloc(sizeof(MIB_TCPTABLE));
+	DWORD dwSize = sizeof(MIB_TCPTABLE);
+	BOOL bOrder = true;
+	char szRemoteAddr[128];
+	struct in_addr IpAddr;
+	std::string remoteAddress = "";
+
+	DWORD dw = GetTcpTable(pTcpTable, &dwSize, bOrder);
+	// Not enough space so resize
+	if(dw == ERROR_INSUFFICIENT_BUFFER)
+	{
+		free(pTcpTable);
+		pTcpTable = (MIB_TCPTABLE*)malloc(dwSize);
+	}
+	// Make second call to get actual table data now
+	dw = GetTcpTable(pTcpTable, &dwSize, true);
+	if(dw == NO_ERROR)
+	{
+		//printf("num of entries:%d\n", (int)pTcpTable->dwNumEntries);
+		for(int i = 0; i < (int)pTcpTable->dwNumEntries; i++)
+		{
+			//std::ostringstream os, os1;
+			//	os << (u_long)pTcpTable->table[i].dwRemoteAddr;//ntohs((u_short)pTcpTable->table[i].dwLocalPort)
+			//	os1 << ntohs((u_short)pTcpTable->table[i].dwRemotePort) << " " << ntohs((u_short)pTcpTable->table[i].dwLocalPort);
+			//	log_text_to_file("address " + os.str() + " "+ os1.str(), NULL);
+
+			//if(pTcpTable->table[i].dwState == MIB_TCP_STATE_ESTAB)
+			//{				
+				if(ntohs((u_short)pTcpTable->table[i].dwLocalPort) == 3389)
+				{
+					// Found a RDC ESTABLISHED connection
+					IpAddr.S_un.S_addr = (u_long)pTcpTable->table[i].dwRemoteAddr;
+					strcpy_s(szRemoteAddr, sizeof(szRemoteAddr), inet_ntoa(IpAddr));
+					remoteAddress = szRemoteAddr;
+				}
+			//}			
+		}
+	}
+	//printf("adapter_name:%s\n", "hi");
+	//std::string remoteAddress(szRemoteAddr);
+	return remoteAddress;
+}
+
+std::string GetMac(const char *DestIpString)
+{
+	IPAddr DestIp = 0;
+	//IPAddr SrcIp = 0;
+	ULONG MacAddr[2];
+	ULONG PhysAddrLen = 6;
+	DestIp = inet_addr(DestIpString);
+	std::string MAC = "";
+	BYTE *bPhysAddr;
+	DWORD dw = SendARP(DestIp, 0, &MacAddr, &PhysAddrLen);
+	if(dw == NO_ERROR)
+	{
+		bPhysAddr = (BYTE*)&MacAddr;
+		if(PhysAddrLen)
+		{
+			char buf[80];
+			for(int i = 0; i < (int)PhysAddrLen; i++)
+			{
+				if(i == (PhysAddrLen -1))
+					sprintf(buf, "%.2X", (int)bPhysAddr[i]);
+				else
+					sprintf(buf, "%.2X-", (int)bPhysAddr[i]);
+				MAC += buf;
+			}
+			//MAC += buf;
+			return MAC;
+		}
+	}
+	else
+	{
+		switch(dw)
+		{
+		case ERROR_GEN_FAILURE:
+				break;
+		case ERROR_INVALID_PARAMETER:
+					break;
+		case ERROR_INVALID_USER_BUFFER:
+			break;
+		case ERROR_BAD_NET_NAME:
+			break;
+		case ERROR_BUFFER_OVERFLOW:
+			break;
+		case ERROR_NOT_FOUND:
+			break;
+		default:
+			break;
+
+		}
+	}
+	return MAC;
+}
 
 std::string GetSaltText()
 {
@@ -974,8 +1164,10 @@ std::string GetSaltText()
 
 	if (!::CryptReleaseContext(hProvider, 0))
 		return "";
-	return oss.str();
+	//return oss.str();
+	return "h2CRnuP40n9eFtMG5r8FivgCyGclwZRawJe363C9yzA=";
 }
+
 std::string GetHashText( const void * data, const size_t data_size, HashType hashType )
 {
   HCRYPTPROV hProv = NULL;
@@ -1030,52 +1222,166 @@ std::string GetHashText( const void * data, const size_t data_size, HashType has
   return oss.str();
 }
 
+// Get the OS Version and return the String representation
+std::string GetOSVersion()
+{
+	OSVERSIONINFO osvi;
+    BOOL bIsWindowsXPorLater;
+
+    ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
+    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+
+    GetVersionEx(&osvi);
+	if(osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 0)
+		return "Windows Vista";
+	if(osvi.dwMajorVersion == 5 && osvi.dwMinorVersion == 1)
+		return "Windows XP";
+	if(osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 1)
+		return "Windows 7";
+	if(osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 2)
+		return "Windows 8";
+	if(osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 3)
+		return "Windows 8.1";
+	if(osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0)
+		return "Windows 10";
+    return "Unknown";
+    
+	/* Below is for Windows 8 and above
+	if (IsWindowsXPOrGreater())
+    {
+       return "Windows XP";// printf("XPOrGreater\n");
+    }
+    if (IsWindowsXPSP1OrGreater())
+    {
+        return "Windows XP SP1";//printf("XPSP1OrGreater\n");
+    }
+    if (IsWindowsXPSP2OrGreater())
+    {
+        return "Windows XP SP2";//printf("XPSP2OrGreater\n");
+    }
+    if (IsWindowsXPSP3OrGreater())
+    {
+        return "Windows XP SP3";//printf("XPSP3OrGreater\n");
+    }
+    if (IsWindowsVistaOrGreater())
+    {
+        return "Windows Vista";//printf("VistaOrGreater\n");
+    }
+    if (IsWindowsVistaSP1OrGreater())
+    {
+        return "Windows Vista SP1";//printf("VistaSP1OrGreater\n");
+    }
+    if (IsWindowsVistaSP2OrGreater())
+    {
+        return "Windows Vista SP2";//printf("VistaSP2OrGreater\n");
+    }
+    if (IsWindows7OrGreater())
+    {
+        return "Windows 7";//printf("Windows7OrGreater\n");
+    }
+    if (IsWindows7SP1OrGreater())
+    {
+       return "Windows 7 SP1";// printf("Windows7SP1OrGreater\n");
+    }
+    if (IsWindows8OrGreater())
+    {
+        return "Windows 8";//printf("Windows8OrGreater\n");
+    }
+    if (IsWindows8Point1OrGreater())
+    {
+        return "Windows 8.1";//printf("Windows8Point1OrGreater\n");
+    }
+    if (IsWindows10OrGreater())
+    {
+        return "Windows 10";//printf("Windows10OrGreater\n");
+    }
+    if (IsWindowsServer())
+    {
+        return "Server";//printf("Server\n");
+    }
+    else
+    {
+        //printf("Unknown\n");
+		return "Unknown";
+    }
+	*/
+}
+
 // Builds a HTTP POST string that is passed to the APersona server
 std::string buildAPersonaKey()
 {
 	std::string _ret;
-
-	OSVERSIONINFO osvi;
-	ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
-	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-	GetVersionEx(&osvi);
-	DWORD major, minor;
-	BSTR ver;
-
-	//https://msdn.microsoft.com/en-us/library/windows/desktop/ms724833(v=vs.85).aspx
-	major = osvi.dwMajorVersion;
-	minor = osvi.dwMinorVersion;
-	if( major == 10 && minor == 0)
-		ver = L"Win10";
-	else if (major == 6 && minor == 3)
-		ver = L"Win8.1";
-	else if (major == 6 && minor == 2)
-		ver = L"Win8";
-	else if (major == 6 && minor == 1)
-		ver = L"Win7";
-	else
-		ver = L"NOTDEFINED";
-	
+		
 	_ret = "{";
 	_ret.append("\"apersonaKey\":\"");
 			
-	std::string cpu = GetCPUString() + GetSaltText();
-	std::string apps = GetInstalledApps() + GetSaltText();
+	if(GetSystemMetrics(SM_REMOTESESSION) == 0) // Local
+	{
+		std::string cpu = GetCPUString() + GetSaltText();
+		std::string apps = GetInstalledApps() + GetSaltText();
 
-	std::string h1 = GetHashText(cpu.c_str(), strlen(cpu.c_str()), HashSha256);//getHash();
-	std::string h2 = GetHashText(apps.c_str(), strlen(apps.c_str()), HashSha256);
-	std::string m1 = GetHashText(h1.c_str(), strlen(h1.c_str()), HashMd5);
-	std::string m2 = GetHashText(h2.c_str(), strlen(h2.c_str()), HashMd5);
+		std::string h1 = GetHashText(cpu.c_str(), strlen(cpu.c_str()), HashSha256);//getHash();
+		std::string h2 = GetHashText(apps.c_str(), strlen(apps.c_str()), HashSha256);
+		std::string m1 = GetHashText(h1.c_str(), strlen(h1.c_str()), HashMd5);
+		std::string m2 = GetHashText(h2.c_str(), strlen(h2.c_str()), HashMd5);
 
-	std::string apkeyHash = "";
-	apkeyHash.append(m1);
-	apkeyHash.append("-");
-	apkeyHash.append(m2);
-	apkeyHash.append("-mwin\"");
+		std::string apkeyHash = "";
+		apkeyHash.append(m1);
+		apkeyHash.append("-");
+		apkeyHash.append(m2);
+		apkeyHash.append("-mwin\"");
 		
-	_ret.append(apkeyHash);
+		_ret.append(apkeyHash);
 
+		_ret.append(",\"ipAddress\":");
+		std::string address = get_ipaddress();
+		_ret.append("\"" + address + "\"");
+	}
+	else
+	{
+		std::string remoteAddress = GetTable();
+		if(remoteAddress.length() > 0)
+		{
+			std::string remoteMACAddress = GetMac(remoteAddress.c_str());
+			if(remoteMACAddress.length() > 0)
+			{
+				// Create hash from mac
+				// hash-0-0-mwin
+				std::string macHash = GetHashText(remoteMACAddress.c_str(), strlen(remoteMACAddress.c_str()), HashSha256);
+				std::string md5MacHash = GetHashText(macHash.c_str(), strlen(macHash.c_str()), HashMd5);
+				
+				std::string apkeyHash = "";
+				apkeyHash.append(md5MacHash);
+				apkeyHash.append("-0-0-mwin\"");
+				_ret.append(apkeyHash);
+
+				_ret.append(",\"ipAddress\":");				
+				_ret.append("\"" + remoteAddress + "\"");
+			}
+			else
+			{
+				// Use Remote IP Address to create hash
+				std::string addHash = GetHashText(remoteAddress.c_str(), strlen(remoteAddress.c_str()), HashSha256);
+				std::string md5AddHash = GetHashText(addHash.c_str(), strlen(addHash.c_str()), HashMd5);
+				
+				std::string apkeyHash = "";
+				apkeyHash.append(md5AddHash);
+				apkeyHash.append("-0-0-mwin\"");
+				_ret.append(apkeyHash);
+
+				_ret.append(",\"ipAddress\":");				
+				_ret.append("\"" + remoteAddress + "\"");
+			}
+		}
+		else
+		{
+			// No address found and thus no MAC can be found.  Log error and leave aPersona key blank..
+			log_text_to_file("aPersona RDC Remote Address unable to resolve.", E_ABORT);
+		}
+	}
 	//_ret.append(",\"ipAddress\":");
+	//std::string address = get_ipaddress();
+	//_ret.append("\"" + address + "\"");
 	//PWSTR _tmp = getIADsNetAddress(u, p);
 	//_ret.append(ws2s(_tmp));
 
@@ -1085,8 +1391,8 @@ std::string buildAPersonaKey()
 	_ret.append(",\"deviceType\":\"PC\"");
 
 	_ret.append(",\"osInfo\":\"");
-	std::wstring ws(ver, SysStringLen(ver));
-	_ret.append(ws2s(ws));
+	std::string OS = GetOSVersion();	
+	_ret.append(OS);
 	_ret.append("\"");
 
 	_ret.append("}");
@@ -1104,7 +1410,8 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 	if(user == NULL)
 	{
 		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
-		return NULL;//OutputWrite(L"User is null");
+		log_text_to_file("aPersona Active Directory Error, IADsUser lookup failed for user: " + ws2s(u), NULL);
+		return E_ABORT;//OutputWrite(L"User is null");
 	}
 		
 	// add SAM name (login)
@@ -1160,6 +1467,8 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 			hr = RegSetValueEx (hApersonaKey, value, 0, REG_SZ, (LPBYTE)data, strlen(data)+1);
 		}
 	}
+	else
+		log_text_to_file("aPersona Active Directory Error, failed to read aPersonaOTP attribute for user " + ws2s(u), NULL);
 	
 	if(domainOTPFlag > 0)
 	{
@@ -1173,7 +1482,20 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 			std::wstring _otpws = _otpcode;
 			_DATA.append(ws2s(_otpws));
 	
-			hr = user->get_TelephoneMobile(&_phone);		
+			// Order for Voicemail attempts is Mobile -> Home -> Main profile phone number
+			hr = user->get_TelephoneMobile(&_phone);
+			if(!SUCCEEDED(hr))
+			{
+				log_text_to_file("aPersona Active Directory Error, failed to read Mobile Phonenumber for user " + ws2s(u), hr);
+				hr = user->get_TelephoneHome(&_phone);
+				if(!SUCCEEDED(hr))
+				{
+					log_text_to_file("aPersona Active Directory Error, failed to read Home Phonenumber for user " + ws2s(u), hr);
+					hr = user->get_TelephoneNumber(&_phone);
+					if(!SUCCEEDED(hr))
+						log_text_to_file("aPersona Active Directory Error, failed to read Telephone Phonenumber for user " + ws2s(u), hr);
+				}
+			}		
 			_pszSMSPhone = ws2s(_phone.bstrVal);
 			_DATA.append("&p=");
 			_DATA.append(_pszSMSPhone);
@@ -1191,10 +1513,14 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 			hr = user->get_TelephoneMobile(&_phone);
 			if(!SUCCEEDED(hr))
 			{
+				log_text_to_file("aPersona Active Directory Error, failed to read Mobile Phonenumber for user " + ws2s(u), hr);
 				hr = user->get_TelephoneHome(&_phone);
 				if(!SUCCEEDED(hr))
 				{
+					log_text_to_file("aPersona Active Directory Error, failed to read Home Phonenumber for user " + ws2s(u), hr);
 					hr = user->get_TelephoneNumber(&_phone);
+					if(!SUCCEEDED(hr))
+						log_text_to_file("aPersona Active Directory Error, failed to read Telephone Phonenumber for user " + ws2s(u), hr);
 				}
 			}
 			_pszVoicePhone = ws2s(_phone.bstrVal);
@@ -1218,7 +1544,20 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 			std::wstring _otpws = _otpcode;
 			_DATA.append(ws2s(_otpws));
 	
-			hr = user->get_TelephoneMobile(&_phone);		
+			// Order for Voicemail attempts is Mobile -> Home -> Main profile phone number
+			hr = user->get_TelephoneMobile(&_phone);
+			if(!SUCCEEDED(hr))
+			{
+				log_text_to_file("aPersona Active Directory Error, failed to read Mobile Phonenumber for user " + ws2s(u), hr);
+				hr = user->get_TelephoneHome(&_phone);
+				if(!SUCCEEDED(hr))
+				{
+					log_text_to_file("aPersona Active Directory Error, failed to read Home Phonenumber for user " + ws2s(u), hr);
+					hr = user->get_TelephoneNumber(&_phone);
+					if(!SUCCEEDED(hr))
+						log_text_to_file("aPersona Active Directory Error, failed to read Telephone Phonenumber for user " + ws2s(u), hr);
+				}
+			}		
 			_pszSMSPhone = ws2s(_phone.bstrVal);
 
 			_DATA.append("&p=");
@@ -1235,10 +1574,14 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 			hr = user->get_TelephoneMobile(&_phone);
 			if(!SUCCEEDED(hr))
 			{
+				log_text_to_file("aPersona Active Directory Error, failed to read Mobile Phonenumber for user " + ws2s(u), hr);
 				hr = user->get_TelephoneHome(&_phone);
 				if(!SUCCEEDED(hr))
 				{
+					log_text_to_file("aPersona Active Directory Error, failed to read Home Phonenumber for user " + ws2s(u), hr);
 					hr = user->get_TelephoneNumber(&_phone);
+					if(!SUCCEEDED(hr))
+						log_text_to_file("aPersona Active Directory Error, failed to read Telephone Phonenumber for user " + ws2s(u), hr);
 				}
 			}
 			_pszVoicePhone = ws2s(_phone.bstrVal);
@@ -1258,7 +1601,10 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 	std::string I;
 	hr = GetKeyValue("one-time-trans-key", I);//GetConfigOpt("C:\\Program Files\\aPersona\\config.txt", "identifier");
 	if(!SUCCEEDED(hr))
+	{
+		log_text_to_file("aPersona Registry Error, failed to read one time transaction key value", hr);
 		return hr;
+	}
 	_DATA.append(I);
 
 	//aPersona Key
@@ -1269,7 +1615,7 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 	user->Release();
 
 	pszPostData = _DATA;
-
+	//::MessageBoxA(NULL, _DATA.c_str(), "test", 0);
 	return hr;
 }
 // Using WinHTTP make a connection to the ASM server and POST data
@@ -1298,6 +1644,7 @@ HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int
 	hConnect = WinHttpConnect(m_hSession, wcstrServer, pszPort, 0);
 	if (hConnect == NULL)
 	{
+		log_text_to_file("aPersona Error connecting to Server", NULL);
 		return E_ABORT;
 	}
 
@@ -1309,6 +1656,7 @@ HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int
 	if (hRequest == NULL)
 	{
 		WinHttpCloseHandle(hConnect);
+		log_text_to_file("aPersona Error connecting to Server", NULL);
 		return E_ABORT;
 	}
 
@@ -1318,6 +1666,7 @@ HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int
 	{
 		WinHttpCloseHandle(hConnect);
 		WinHttpCloseHandle(hRequest);
+		log_text_to_file("aPersona Error setting HTTP options", NULL);
 		return E_ABORT;
 	}
 
@@ -1329,6 +1678,7 @@ HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int
 	{
 		WinHttpCloseHandle(hConnect);
 		WinHttpCloseHandle(hRequest);
+		log_text_to_file("aPersona Error adding HTTP request headers", NULL);
 		return E_ABORT;
 	}
 
@@ -1339,6 +1689,7 @@ HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int
 	{
 		WinHttpCloseHandle(hConnect);
 		WinHttpCloseHandle(hRequest);
+		log_text_to_file("aPersona Error sending HTTP request to Server", NULL);
 		//delete []_parmsc;
 		return E_ABORT;
 	}
@@ -1347,6 +1698,7 @@ HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int
 	{
 	    WinHttpCloseHandle(hConnect);
 	    WinHttpCloseHandle(hRequest);
+		log_text_to_file("aPersona Error reading HTTP response from Server", NULL);
 		return E_ABORT;
 	}
 
@@ -1486,7 +1838,10 @@ HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
 	//if(pszPostData.empty())
 	//	return E_INVALIDARG;
 	if(!SUCCEEDED(hr))
+	{
+		log_text_to_file("aPersona Error building HTTP Post string", hr);
 		return hr;
+	}
 	
 	// Convert string to char*
 	char *_parmsc = new char[pszPostData.length()+1];
@@ -1534,7 +1889,8 @@ HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
 		switch(code)
 			{
 				case 403: // invalid API license
-					::MessageBox(NULL, info.c_str(), message.c_str(), 0);
+					//::MessageBox(NULL, info.c_str(), message.c_str(), 0);
+					log_text_to_file("aPersona Error invalid API License: " + info, E_ABORT);
 					return E_INVALIDARG;
 					break;
 				case 200: // ok -- EXIT to WINDOWS AUTHENTICATION
@@ -1550,7 +1906,8 @@ HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
 						break;
 					}
 				case 404: // error -- Some kind of error
-					::MessageBox(NULL, info.c_str(), message.c_str(), 0);
+					//::MessageBox(NULL, info.c_str(), message.c_str(), 0);
+					log_text_to_file("aPersona Error: " + info, E_ABORT);
 					return E_ABORT;
 					break;
 				case 401: // otp timeout -- flag = 1(resend)
@@ -1570,12 +1927,13 @@ HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
 						}
 						otp.append("\nPlease retrieve the Passcode and enter it to complete authentication.");
 						::MessageBox(NULL, otp.c_str(), message.c_str(), 0);//::MessageBox(NULL, info.c_str(), message.c_str(), 0);
-						return E_ACCESSDENIED;
+						return E_FAIL;
 						break;
 					}
 				case 500:
 					{
-						::MessageBox(NULL, info.c_str(), message.c_str(), 0);
+						//::MessageBox(NULL, info.c_str(), message.c_str(), 0);
+						log_text_to_file("aPersona Error: " + info, E_ABORT);
 						return E_INVALIDARG;
 						break;
 					}
@@ -1597,7 +1955,7 @@ HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
 						}
 						otp.append("\nPlease retrieve the Passcode and enter it to complete authentication.");
 						::MessageBox(NULL, otp.c_str(), message.c_str(), 0);//::MessageBox(NULL, info.c_str(), message.c_str(), 0);
-						return E_ACCESSDENIED;
+						return E_FAIL;
 						break;
 					}
 				default:
@@ -1747,14 +2105,18 @@ HRESULT CSampleCredential::GetSerialization(
 			{
 				DWORD dwErr = GetLastError();
 				hr = HRESULT_FROM_WIN32(dwErr);
+				log_text_to_file("aPersona Error.", hr);
 			}
 		}
 		else
 		{
 			// TODO::: 
 			// deal with aPersona authentication failures here?
-			if(hr == E_INVALIDARG)
+			if(hr != E_FAIL)
+			{
+				log_text_to_file("aPersona Error validating your account.", E_ABORT);
 				::MessageBoxA(NULL, "There was a problem validating your account.  Please contact your System Administrator.", "APersona Message", 0);
+			}
 			return hr;
 		}
 	}	

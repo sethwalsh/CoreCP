@@ -40,7 +40,6 @@
 
 //for dialogbox
 #include <WinUser.h>
-//#include <Windows.h>
 
 //progressdialogbox
 #include <Shlobj.h>
@@ -61,7 +60,6 @@
 //generating hash
 #include "sha1.h"
 #include <time.h>
-//#include <WinCrypt.h>
 #include <sstream>
 
 #include <fstream>
@@ -72,15 +70,36 @@
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
 
+/**
+ * @fn	std::string get_adapter(PIP_ADAPTER_ADDRESSES aa)
+ *
+ * @brief	Returns an adapter name based on a given IP
+ * 			Adapter Address
+ *
+ * @param	aa	The adapter's address
+ *
+ * @return	A string representing the name of said adapter
+ */
+
 std::string get_adapter(PIP_ADAPTER_ADDRESSES aa)
 {
 	char buf[BUFSIZ];
 	memset(buf, 0, BUFSIZ);
 	WideCharToMultiByte(CP_ACP, 0, aa->FriendlyName, wcslen(aa->FriendlyName), buf, BUFSIZ, NULL, NULL);
 	std::string adapter_name(buf);
-	//printf("adapter_name:%s\n", buf);
 	return adapter_name;
 }
+
+/**
+ * @fn	std::string get_addr(PIP_ADAPTER_UNICAST_ADDRESS ua)
+ *
+ * @brief	Gets the address in string form of a given unicast address from a PIP Adapter
+ *
+ * @param	ua	The Unicast Address
+ *
+ * @return	The address in string form
+ */
+
 std::string get_addr(PIP_ADAPTER_UNICAST_ADDRESS ua)
 {
 	char buf[BUFSIZ];
@@ -90,12 +109,19 @@ std::string get_addr(PIP_ADAPTER_UNICAST_ADDRESS ua)
 	{	
 		memset(buf, 0, BUFSIZ);
 		getnameinfo(ua->Address.lpSockaddr, ua->Address.iSockaddrLength, buf, sizeof(buf), NULL, 0,NI_NUMERICHOST);
-	//printf("%s\n", buf);
 		std::string address(buf);
 		return address;
 	}
 	return "";
 }
+
+/**
+ * @fn	std::string get_ipaddress()
+ *
+ * @brief	Gets the IPAddress of a machine, works for either wired or wireless connections
+ *
+ * @return	The IP Address in string form
+ */
 
 std::string get_ipaddress()
 {
@@ -105,20 +131,20 @@ std::string get_ipaddress()
 
 	rv = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, NULL, &size);
 	if (rv != ERROR_BUFFER_OVERFLOW) {
-		//fprintf(stderr, "GetAdaptersAddresses() failed...");
 		return "";
 	}
 	adapter_addresses = (PIP_ADAPTER_ADDRESSES)malloc(size);
 
 	rv = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, adapter_addresses, &size);
 	if (rv != ERROR_SUCCESS) {
-		//fprintf(stderr, "GetAdaptersAddresses() failed...");
 		free(adapter_addresses);
 		return "";
 	}
 	std::string ADDRESS = "";
 	for (aa = adapter_addresses; aa != NULL; aa = aa->Next) {
 		std::string adapter = get_adapter(aa);
+
+		//LAN
 		if(adapter.compare("Local Area Connection") == 0){
 			for (ua = aa->FirstUnicastAddress; ua != NULL; ua = ua->Next) {
 				int family = ua->Address.lpSockaddr->sa_family;
@@ -129,6 +155,8 @@ std::string get_ipaddress()
 				}				
 			}
 		}
+
+		//WIFI
 		if(adapter.compare("Wireless Network Connection") == 0){
 			for (ua = aa->FirstUnicastAddress; ua != NULL; ua = ua->Next) {
 				int family = ua->Address.lpSockaddr->sa_family;
@@ -146,6 +174,20 @@ std::string get_ipaddress()
 }
 
 std::string _pszEmail, _pszVoicePhone, _pszSMSPhone;
+
+/**
+ * @fn	std::string GetConfigOpt(std::string file, std::string key)
+ *
+ * @brief	Gets configuration option.
+ *
+ * @param	file	The file.
+ * @param	key 	The key.
+ *
+ * @return	The configuration option.
+ */
+
+//TODO: CLARIFY
+
 std::string GetConfigOpt(std::string file, std::string key)
 {
 	std::string value;
@@ -164,14 +206,24 @@ std::string GetConfigOpt(std::string file, std::string key)
 }
 void writeToLog(HRESULT hr)
 {
-	//TODO
+	//TODO: CLARIFY
 	// finish formatting and writting HRESULT codes to a standard logging file for production
 }
+
+/**
+ * @fn	std::vector<std::string> split_string(LPSTR pszOutBuffer, std::string delim)
+ *
+ * @brief	Splits a string using a given delimiter
+ *
+ * @param	pszOutBuffer	Buffer for out data.
+ * @param	delim			The delimiter.
+ *
+ * @return	vector of strings
+ */
 
 std::vector<std::string> split_string(LPSTR pszOutBuffer, std::string delim)
 {
 	std::vector<std::string> _s;
-	//std::string s(pszOutBuffer);
 	char *pch = strtok(pszOutBuffer, delim.c_str());
 	if(pch != NULL)
 		_s.push_back(pch);
@@ -184,6 +236,16 @@ std::vector<std::string> split_string(LPSTR pszOutBuffer, std::string delim)
 	return _s;
 }
 
+/**
+ * @fn	std::string ws2s(const std::wstring& s)
+ *
+ * @brief	Ws 2s.
+ *
+ * @param	s	The std::wstring to process.
+ *
+ * @return	A std::string.
+ */
+//TOOD: CLARIFY
 std::string ws2s(const std::wstring& s)
 {
     int len;
@@ -196,7 +258,15 @@ std::string ws2s(const std::wstring& s)
     return r;
 }
 
-// Log any errors to our log file
+/**
+ * @fn	void log_text_to_file(const std::string &EXTRA_MESSAGE, HRESULT hr)
+ *
+ * @brief	Logs Errors to file.
+ *
+ * @param	EXTRA_MESSAGE	Message describing the message.
+ * @param	hr			 	HRESULT with error and warning codes/conditions.
+ */
+
 void log_text_to_file(const std::string &EXTRA_MESSAGE, HRESULT hr)
 {
 	time_t t = time(NULL);
@@ -208,18 +278,26 @@ void log_text_to_file(const std::string &EXTRA_MESSAGE, HRESULT hr)
 	line.append(buffer);
 	line.append("    ");
 	line.append("aPersona Message: " + EXTRA_MESSAGE);
-	line.append("    SYSTEM Error: ");	
+	line.append("    SYSTEM Error: ");
 	line.append(_com_error(hr).ErrorMessage());
-	
+
 	std::ofstream log_file("C:\\Program Files (x86)\\APersona\\aPersona Adaptive Multi-Factor Credential Provider v1.1.9 (x64) Setup\\log.txt", std::ios_base::out | std::ios_base::app);
 
 	log_file << line << std::endl;
 }
 
-/*
-	Checks to see if the string argument (user chosen domain) is the local machine name.  If so then the
-	user has requested to authenticate locally and returns TRUE.
-*/
+/**
+ * @fn	bool isLocal(PWSTR d)
+ *
+ * @brief	Check to see if the string argument, a user chosen domain
+ * 			is the local machine name. If so, than the user has requested
+ * 			to authenticate locally and returns TRUE
+ *
+ * @param	d	The PWSTR to process.
+ *
+ * @return	true if local, false if not.
+ */
+
 bool isLocal(PWSTR d)
 {
 	WCHAR local[MAX_COMPUTERNAME_LENGTH+1];
@@ -239,7 +317,16 @@ bool isLocal(PWSTR d)
 	return false;
 }
 
-// Takes a PWSTR username from login and splits it into context and userid
+/**
+ * @fn	PWSTR splitUsername(PWSTR u)
+ *
+ * @brief	Takes a PWSTR username from login and splits it into context and userid.
+ *
+ * @param	u	The PWSTR to process.
+ *
+ * @return	A PWSTR split into contextand userid.
+ */
+
 PWSTR splitUsername(PWSTR u)
 {
 	PWSTR splitUser = NULL, splitDomain = NULL;
@@ -256,10 +343,15 @@ PWSTR splitUsername(PWSTR u)
 		splitUser = u;
 	return splitUser;
 }
-/*
-Gets MAC Address
-//TODO: http://stackoverflow.com/questions/13646621/how-to-get-mac-address-in-windows-with-c
-*/
+
+/**
+ * @fn	char* GetMacAddress()
+ *
+ * @brief	Gets MAC address.
+ *
+ * @return	null if it fails, else the MAC address.
+ */
+
 char* GetMacAddress()
 {
 	PIP_ADAPTER_INFO AdapterInfo;
@@ -280,7 +372,6 @@ char* GetMacAddress()
 		AdapterInfo = (IP_ADAPTER_INFO *) malloc(dwBufLen);
 
 		if(AdapterInfo == NULL){
-			//TODO: Error allocating memory for getadapters info, like above. handle gracefully.
 		}
 	}
 
@@ -301,7 +392,14 @@ char* GetMacAddress()
 	return mac_addr;
 }
 
-// Get the Domain name string
+/**
+ * @fn	LPWSTR GetDomain()
+ *
+ * @brief	Gets the Domain.
+ *
+ * @return	The domain name.
+ */
+
 LPWSTR GetDomain()
 {
 	DSROLE_PRIMARY_DOMAIN_INFO_BASIC *info;
@@ -333,7 +431,6 @@ _cRef(1),
 
 CSampleCredential::~CSampleCredential()
 {
-	/// ------------ TODO: May need to clear out the username field 
 	if (_rgFieldStrings[SFI_PASSWORD])
 	{
 		// CoTaskMemFree (below) deals with NULL, but StringCchLength does not.
@@ -345,7 +442,6 @@ CSampleCredential::~CSampleCredential()
 		}
 		else
 		{
-			// TODO: Determine how to handle count error here.
 		}
 	}
 	for (int i = 0; i < ARRAYSIZE(_rgFieldStrings); i++)
@@ -388,7 +484,6 @@ HRESULT CSampleCredential::Initialize(
 	// Initialize the String values of all the fields.
 	if (SUCCEEDED(hr))
 	{
-		//hr = SHStrDupW(pwzUsername, &_rgFieldStrings[SFI_USERNAME]);
 		hr = SHStrDupW(L"", &_rgFieldStrings[SFI_USERNAME]);
 	}	
 	if(SUCCEEDED(hr))
@@ -405,7 +500,6 @@ HRESULT CSampleCredential::Initialize(
 	}
 	if (SUCCEEDED(hr))
     {
-        //hr = SHStrDupW(GetDomain(), &_rgFieldStrings[SFI_DOMAIN]);
 		wchar_t buf[80];
 		wcscpy(buf, L"Log on to: ");
 		wcscat(buf, GetDomain());
@@ -415,7 +509,16 @@ HRESULT CSampleCredential::Initialize(
 	return S_OK;
 }
 
-// LogonUI calls this in order to give us a callback in case we need to notify it of anything.
+/**
+ * @fn	HRESULT CSampleCredential::Advise( ICredentialProviderCredentialEvents* pcpce )
+ *
+ * @brief	LogonUI calls this in order to give us a callback in case we need to notify it of
+ * 			anything.
+ *
+ * @param [in,out]	pcpce	If non-null, the pcpce.
+ *
+ * @return	A hResult.
+ */
 HRESULT CSampleCredential::Advise(
 	ICredentialProviderCredentialEvents* pcpce
 	)
@@ -429,7 +532,14 @@ HRESULT CSampleCredential::Advise(
 	return S_OK;
 }
 
-// LogonUI calls this to tell us to release the callback.
+/**
+ * @fn	HRESULT CSampleCredential::UnAdvise()
+ *
+ * @brief	LogonUI calls this to tell us to release the callback.
+ *
+ * @return	A hResult.
+ */
+
 HRESULT CSampleCredential::UnAdvise()
 {
 	if (_pCredProvCredentialEvents)
@@ -453,9 +563,16 @@ HRESULT CSampleCredential::SetSelected(BOOL* pbAutoLogon)
 	return S_OK;
 }
 
-// Similarly to SetSelected, LogonUI calls this when your tile was selected
-// and now no longer is. The most common thing to do here (which we do below)
-// is to clear out the password field.
+/**
+ * @fn	HRESULT CSampleCredential::SetDeselected()
+ *
+ * @brief	Similarly to SetSelected, LogonUI calls this when your tile was selected and now no
+ * 			longer is. The most common thing to do here (which we do below)
+ * 			is to clear out the password field.
+ *
+ * @return	A hResult.
+ */
+
 HRESULT CSampleCredential::SetDeselected()
 {
 	HRESULT hr = S_OK;
@@ -489,8 +606,19 @@ HRESULT CSampleCredential::SetDeselected()
 	return hr;
 }
 
-// Gets info for a particular field of a tile. Called by logonUI to get information to 
-// display the tile.
+/**
+ * @fn	HRESULT CSampleCredential::GetFieldState( DWORD dwFieldID, CREDENTIAL_PROVIDER_FIELD_STATE* pcpfs, CREDENTIAL_PROVIDER_FIELD_INTERACTIVE_STATE* pcpfis )
+ *
+ * @brief	Gets info for a particular field of a tile. Called by logonUI to get information to
+ * 			display the tile.
+ *
+ * @param	dwFieldID	  	Identifier for the field.
+ * @param [in,out]	pcpfs 	If non-null, the pcpfs.
+ * @param [in,out]	pcpfis	If non-null, the pcpfis.
+ *
+ * @return	The field state.
+ */
+
 HRESULT CSampleCredential::GetFieldState(
 	DWORD dwFieldID,
 	CREDENTIAL_PROVIDER_FIELD_STATE* pcpfs,
@@ -514,7 +642,16 @@ HRESULT CSampleCredential::GetFieldState(
 	return hr;
 }
 
-// Sets ppwsz to the string value of the field at the index dwFieldID.
+/**
+ * @fn	HRESULT CSampleCredential::GetStringValue( DWORD dwFieldID, PWSTR* ppwsz )
+ *
+ * @brief	Gets ppwsz to the string value of the field at the index dwFieldID.
+ *
+ * @param	dwFieldID	 	Identifier for the field.
+ * @param [in,out]	ppwsz	If non-null, the ppwsz.
+ *
+ * @return	The string value.
+ */
 HRESULT CSampleCredential::GetStringValue(
 	DWORD dwFieldID, 
 	PWSTR* ppwsz
@@ -537,7 +674,16 @@ HRESULT CSampleCredential::GetStringValue(
 	return hr;
 }
 
-// Gets the image to show in the user tile.
+/**
+ * @fn	HRESULT CSampleCredential::GetBitmapValue( DWORD dwFieldID, HBITMAP* phbmp )
+ *
+ * @brief	Gets the image to show in the user tile.
+ *
+ * @param	dwFieldID	 	Identifier for the field.
+ * @param [in,out]	phbmp	If non-null, the phbmp.
+ *
+ * @return	The bitmap value.
+ */
 HRESULT CSampleCredential::GetBitmapValue(
 	DWORD dwFieldID, 
 	HBITMAP* phbmp
@@ -565,10 +711,20 @@ HRESULT CSampleCredential::GetBitmapValue(
 	return hr;
 }
 
-// Sets pdwAdjacentTo to the index of the field the submit button should be 
-// adjacent to. We recommend that the submit button is placed next to the last
-// field which the user is required to enter information in. Optional fields
-// should be below the submit button.
+/**
+ * @fn	HRESULT CSampleCredential::GetSubmitButtonValue( DWORD dwFieldID, DWORD* pdwAdjacentTo )
+ *
+ * @brief	Gets pdwAdjacentTo to the index of the field the submit button should be adjacent to.
+ * 			We recommend that the submit button is placed next to the last field which the user
+ * 			is required to enter information in. Optional fields should be below the submit
+ * 			button.
+ *
+ * @param	dwFieldID			 	Identifier for the field.
+ * @param [in,out]	pdwAdjacentTo	If non-null, the pdw adjacent to.
+ *
+ * @return	The submit button value.
+ */
+
 HRESULT CSampleCredential::GetSubmitButtonValue(
 	DWORD dwFieldID,
 	DWORD* pdwAdjacentTo
@@ -591,8 +747,18 @@ HRESULT CSampleCredential::GetSubmitButtonValue(
 	return hr;
 }
 
-// Sets the value of a field which can accept a string as a value.
-// This is called on each keystroke when a user types into an edit field.
+/**
+ * @fn	HRESULT CSampleCredential::SetStringValue( DWORD dwFieldID, PCWSTR pwz )
+ *
+ * @brief	Sets the value of a field which can accept a string as a value. This is called on
+ * 			each keystroke when a user types into an edit field.
+ *
+ * @param	dwFieldID	Identifier for the field.
+ * @param	pwz		 	The pwz.
+ *
+ * @return	A hResult.
+ */
+
 HRESULT CSampleCredential::SetStringValue(
 	DWORD dwFieldID, 
 	PCWSTR pwz      
@@ -605,11 +771,7 @@ HRESULT CSampleCredential::SetStringValue(
 		(CPFT_EDIT_TEXT == _rgCredProvFieldDescriptors[dwFieldID].cpft || 
 		CPFT_PASSWORD_TEXT == _rgCredProvFieldDescriptors[dwFieldID].cpft)) 
 	{
-		/*** TODO!! At this point we need to detect the user attempting to change the default logon domain and we can adjust the 
-		Text fields if needed to display that to the user.
-		- For example if the user types .\ Then we know that the user requested a logon to the localhost and would set the Text to display the COMPUTERNAME
-		- If they type DOMAIN\ then set the Text to be DOMAIN
-		***/
+		
 		if(dwFieldID == SFI_OTP)
 		{
 			_pszOTP = _rgFieldStrings[SFI_OTP];			
@@ -637,9 +799,6 @@ HRESULT CSampleCredential::SetStringValue(
 						GetComputerNameW(wsz, &cch);
 						wcscat(_b, wsz);
 						hr = _pCredProvCredentialEvents->SetFieldString(this, SFI_DOMAIN, _b);
-						//std::wstring ws(_b);
-						//std::vector<wchar_t> v(ws.begin(), ws.end());
-						//_pDomainName = v.data();
 						_pDomainName = _b;
 					}
 				}
@@ -749,30 +908,27 @@ HRESULT CSampleCredential::CommandLinkClicked(DWORD dwFieldID)
 }
 //------ end of methods for controls we don't have in our tile ----//
 
-//	Returns a pointer to an IADsUser object that can be used to collect domain attributes for that user otherwise returns NULL if 
-//	a failure occurs.
-//
-//	@param	pw	A PWSTR for the users password that is required to authenticate the search
-//  @param	u	A PWSTR for the users username that is required to authenticate the search and what to search for
-//  @param	hr	A HRESULT address to store the HRESULT of various IADs calls
-//  @ret	_user	A IADsUser pointer
+/**
+* @fn	IADsUser* getIADsUser(PWSTR pw, PWSTR u, HRESULT& hr)
+* @brief	Returns a pointer to an IADsUser object that can be used
+* 		to collect domain attributes for that user otherwise returns NULL
+* 		if a failure occurs. @param pw A PWSTR for the users password that
+* 		is required to authenticate the search @param u A PWSTR for the users
+* 		username that is required to authenticate the search and what to search
+* 		for @param hr A HRESULT address to store the HRESULT of various IADs 
+* 		calls
+*
+* @param	pw		  	A PWSTR for the users password that is required to authenticate the search
+* @param	u		  	A PWSTR for the users username that is required to authenticate the search and what to search for
+* @param [in,out]	hr	A HRESULT address to store the HRESULT of various IADs calls
+*
+* @return	 _user A IADsUser pointer IADsUser* getIADsUser(PWSTR pw, PWSTR u, HRESULT& hr)
+*/
 IADsUser* getIADsUser(PWSTR pw, PWSTR u, HRESULT& hr)
 {
 	IDirectorySearch *pDSSearch = NULL;
 	IADsUser *_user = NULL;
 	CoInitialize(NULL);
-	/// WinNT - used to communicate with windows domain controllers.
-	/// LDAP  - used to communicate with LDAP servers, such as Active Directory.
-	// LDAP: - binds to root of LDAP namespace
-	// LDAP://server01 - binds to specific server
-	// LDAP://server01:333 - binds to specific server using designated port
-	// LDAP://CN=Jeff Smith, CN=users, DC=blah, DC=com - bind to a specific object  /** Should probably default to this **/
-	// LDAP://server01/CN=Jeff Smith, CN=users, DC=blah, DC=com - bind to specific object through specific server
-	/*** If kerberos is required, then you have to use a server-less string, OR a fully qualified DNS server name such as 
-	LDAP://server01.fabrikam.com/CN=Jeff Smith, CN=users, DC=fabrikam, DC=com
-	***/
-	/// ADs   - used to provde an IADsNamespaces implementation that can be used to enumerate all the ADSI providers installed on the client
-
 	// Get the current Domain
 	LPWSTR pszDomain = GetDomain();	
 		
@@ -799,14 +955,12 @@ IADsUser* getIADsUser(PWSTR pw, PWSTR u, HRESULT& hr)
 		hr = pDSSearch->ExecuteSearch(buf, pszAttr, 1, &hSearch);
 		if(!SUCCEEDED(hr))
 		{
-			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
 			log_text_to_file("aPersona Active Directory Error", hr);
 			return NULL;
 		}
 		hr = pDSSearch->GetFirstRow(hSearch);
 		if(!SUCCEEDED(hr))
 		{
-			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
 			log_text_to_file("aPersona Active Directory Error", hr);
 			pDSSearch->Release();
 			return NULL;
@@ -815,7 +969,6 @@ IADsUser* getIADsUser(PWSTR pw, PWSTR u, HRESULT& hr)
 		hr = pDSSearch->GetColumn(hSearch, L"distinguishedName", &column);
 		if(!SUCCEEDED(hr))
 		{
-			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
 			log_text_to_file("aPersona Active Directory Error", hr);
 			pDSSearch->Release();
 			return NULL;
@@ -829,7 +982,6 @@ IADsUser* getIADsUser(PWSTR pw, PWSTR u, HRESULT& hr)
 		hr = ADsOpenObject(_d, u, pw, ADS_SECURE_AUTHENTICATION, IID_IADsUser, (void**)&_user);
 		if(!SUCCEEDED(hr))
 		{
-			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
 			log_text_to_file("aPersona Active Directory Error", hr);
 			return NULL;
 		}		
@@ -840,8 +992,16 @@ IADsUser* getIADsUser(PWSTR pw, PWSTR u, HRESULT& hr)
 	return _user;
 }
 
-//Gets Processor ID
-// @ret	procInfo a char pointer to the string processor id
+/**
+ * @fn	char* GetProcessor()
+ *
+ * @brief	Gets Processor ID
+ * 			
+ * @ret	procInfo a char pointer to the string processor id.
+ *
+ * @return	null if it fails, else the processor.
+ */
+
 char* GetProcessor() {
 	char procInfo[10];
 
@@ -857,7 +1017,15 @@ char* GetProcessor() {
 	return procInfo;
 }
 
-// Returns a DWORD value for a given Registry key within the HKLM\SOFTWARE\APersona hive
+/**
+ * @fn	DWORD GetKeyValueDword(std::string key)
+ *
+ * @brief	Returns a DWORD value for a given Registry key within the HKLM\SOFTWARE\APersona hive.
+ *
+ * @param	key	The key.
+ *
+ * @return	The key value double word.
+ */
 DWORD GetKeyValueDword(std::string key)
 {
 	HKEY hApersonaKey = NULL;
@@ -869,15 +1037,13 @@ DWORD GetKeyValueDword(std::string key)
 	//Open the "Uninstall" key.
 	HRESULT hr = RegOpenKeyEx(HKEY_LOCAL_MACHINE, sRoot.append(key).c_str(), 0, KEY_READ, &hApersonaKey);
 	if(!SUCCEEDED(hr))
-	{		
-		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
+	{
 		log_text_to_file("aPersona Registry Error", hr);
 		RegCloseKey(hApersonaKey);
 	}
 	hr = RegQueryValueEx(hApersonaKey, key.c_str(), NULL, &dwType, (LPBYTE)sConfigValue, &dwBufferSize);
 	if(!SUCCEEDED(hr))
 	{
-		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
 		log_text_to_file("aPersona Registry Error", hr);
 		RegCloseKey(hApersonaKey);
 	}
@@ -887,8 +1053,17 @@ DWORD GetKeyValueDword(std::string key)
 	return sConfigValue;
 }
 
-// Reads a string value from a registry key in the HKLM\SOFTWARE\APersona hive
-// @ret hr HRESULT containing any errors from the lookup
+/**
+ * @fn	HRESULT GetKeyValue(std::string key, std::string& value)
+ *
+ * @brief	Reads a string value from a registry key in the HKLM\SOFTWARE\APersona hive
+ * 			@ret hr HRESULT containing any errors from the lookup.
+ *
+ * @param	key			 	The key.
+ * @param [in,out]	value	The value.
+ *
+ * @return	The key value.
+ */
 HRESULT GetKeyValue(std::string key, std::string& value)
 {
 	HKEY hApersonaKey = NULL;
@@ -918,7 +1093,6 @@ HRESULT GetKeyValue(std::string key, std::string& value)
 				RegCloseKey(hApersonaKey);
 				value = "";
 				log_text_to_file("aPersona Registry Error reading key " + key, hr);
-				//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
 				return hr;
 			}
 		}
@@ -927,7 +1101,6 @@ HRESULT GetKeyValue(std::string key, std::string& value)
 			RegCloseKey(hApersonaKey);
 			value = "";
 			log_text_to_file("aPersona Registry Error reading key " + key, hr);
-			//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
 			return hr;
 		}
 	}
@@ -936,14 +1109,20 @@ HRESULT GetKeyValue(std::string key, std::string& value)
 		RegCloseKey(hApersonaKey);
 		value = "";
 		log_text_to_file("aPersona Registry Error reading key " + key, hr);
-		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
 		return hr;
 	}	
 	return hr;
 }
 
-// Gets a list of installed applications and returns them as a single string which is used later
-// to create a unique SHA256 hash
+/**
+ * @fn	std::string GetInstalledApps()
+ *
+ * @brief	Gets a list of installed applications and returns them as a single string which is
+ * 			used later to create a unique SHA256 hash.
+ *
+ * @return	The installed apps.
+ */
+
 std::string GetInstalledApps()
 {
 	std::string list = "";
@@ -960,8 +1139,6 @@ std::string GetInstalledApps()
     //Open the "Uninstall" key.
     if(RegOpenKeyEx(HKEY_LOCAL_MACHINE, sRoot, 0, KEY_READ, &hUninstKey) != ERROR_SUCCESS)
     {
-		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Registry Error", 0);
-		//log_text_to_file("aPersona Registry Error reading list of installed applications", NULL);
         return "";
     }
 
@@ -978,7 +1155,6 @@ std::string GetInstalledApps()
             {
                 RegCloseKey(hAppKey);
                 RegCloseKey(hUninstKey);
-				//log_text_to_file("aPersona Registry Error reading list of installed applications", NULL);
                 return "";
             }
 
@@ -1002,8 +1178,15 @@ std::string GetInstalledApps()
     return list;
 }
 
-// Get the unique CPU identifier and return it as a string which is used later to create
-// a unique SHA256 hash
+/**
+ * @fn	std::string GetCPUString()
+ *
+ * @brief	Get the unique CPU identifier and return it as a string which is used later to create
+ * 			a unique SHA256 hash.
+ *
+ * @return	The CPU string.
+ */
+
 std::string GetCPUString()
 {
 	// Get extended ids.
@@ -1062,16 +1245,10 @@ std::string GetTable()
 	dw = GetTcpTable(pTcpTable, &dwSize, true);
 	if(dw == NO_ERROR)
 	{
-		//printf("num of entries:%d\n", (int)pTcpTable->dwNumEntries);
+
 		for(int i = 0; i < (int)pTcpTable->dwNumEntries; i++)
 		{
-			//std::ostringstream os, os1;
-			//	os << (u_long)pTcpTable->table[i].dwRemoteAddr;//ntohs((u_short)pTcpTable->table[i].dwLocalPort)
-			//	os1 << ntohs((u_short)pTcpTable->table[i].dwRemotePort) << " " << ntohs((u_short)pTcpTable->table[i].dwLocalPort);
-			//	log_text_to_file("address " + os.str() + " "+ os1.str(), NULL);
-
-			//if(pTcpTable->table[i].dwState == MIB_TCP_STATE_ESTAB)
-			//{				
+				
 				if(ntohs((u_short)pTcpTable->table[i].dwLocalPort) == 3389)
 				{
 					// Found a RDC ESTABLISHED connection
@@ -1079,18 +1256,25 @@ std::string GetTable()
 					strcpy_s(szRemoteAddr, sizeof(szRemoteAddr), inet_ntoa(IpAddr));
 					remoteAddress = szRemoteAddr;
 				}
-			//}			
+					
 		}
 	}
-	//printf("adapter_name:%s\n", "hi");
-	//std::string remoteAddress(szRemoteAddr);
 	return remoteAddress;
 }
+
+/**
+ * @fn	std::string GetMac(const char *DestIpString)
+ *
+ * @brief	Gets a MAC Address
+ *
+ * @param	DestIpString	Destination IP string.
+ *
+ * @return	The MAC address in string form.
+ */
 
 std::string GetMac(const char *DestIpString)
 {
 	IPAddr DestIp = 0;
-	//IPAddr SrcIp = 0;
 	ULONG MacAddr[2];
 	ULONG PhysAddrLen = 6;
 	DestIp = inet_addr(DestIpString);
@@ -1111,7 +1295,6 @@ std::string GetMac(const char *DestIpString)
 					sprintf(buf, "%.2X-", (int)bPhysAddr[i]);
 				MAC += buf;
 			}
-			//MAC += buf;
 			return MAC;
 		}
 	}
@@ -1139,6 +1322,14 @@ std::string GetMac(const char *DestIpString)
 	return MAC;
 }
 
+/**
+ * @fn	std::string GetSaltText()
+ *
+ * @brief	Gets salt text.
+ *
+ * @return	The salt text.
+ */
+
 std::string GetSaltText()
 {
 	HCRYPTPROV hProvider = NULL;
@@ -1156,7 +1347,7 @@ std::string GetSaltText()
 
 	std::ostringstream oss;
 	for (DWORD i = 0; i < dwLength; ++i){
-		//std::cout << std::hex << *static_cast<unsigned int*>(pbBuffer[i]) << std::endl;
+
 		oss.fill('0');
 		oss.width(2);
 		oss << std::hex << static_cast<const unsigned int>(pbBuffer[i]);
@@ -1164,9 +1355,21 @@ std::string GetSaltText()
 
 	if (!::CryptReleaseContext(hProvider, 0))
 		return "";
-	//return oss.str();
+
 	return "h2CRnuP40n9eFtMG5r8FivgCyGclwZRawJe363C9yzA=";
 }
+
+/**
+ * @fn	std::string GetHashText( const void * data, const size_t data_size, HashType hashType )
+ *
+ * @brief	Gets hash text.
+ *
+ * @param	data	 	The data.
+ * @param	data_size	Size of the data.
+ * @param	hashType 	Type of the hash.
+ *
+ * @return	The hash text.
+ */
 
 std::string GetHashText( const void * data, const size_t data_size, HashType hashType )
 {
@@ -1222,7 +1425,13 @@ std::string GetHashText( const void * data, const size_t data_size, HashType has
   return oss.str();
 }
 
-// Get the OS Version and return the String representation
+/**
+ * @fn	std::string GetOSVersion()
+ *
+ * @brief	Get the OS Version and return the String representation.
+ *
+ * @return	The operating system version.
+ */
 std::string GetOSVersion()
 {
 	OSVERSIONINFO osvi;
@@ -1245,69 +1454,16 @@ std::string GetOSVersion()
 	if(osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0)
 		return "Windows 10";
     return "Unknown";
-    
-	/* Below is for Windows 8 and above
-	if (IsWindowsXPOrGreater())
-    {
-       return "Windows XP";// printf("XPOrGreater\n");
-    }
-    if (IsWindowsXPSP1OrGreater())
-    {
-        return "Windows XP SP1";//printf("XPSP1OrGreater\n");
-    }
-    if (IsWindowsXPSP2OrGreater())
-    {
-        return "Windows XP SP2";//printf("XPSP2OrGreater\n");
-    }
-    if (IsWindowsXPSP3OrGreater())
-    {
-        return "Windows XP SP3";//printf("XPSP3OrGreater\n");
-    }
-    if (IsWindowsVistaOrGreater())
-    {
-        return "Windows Vista";//printf("VistaOrGreater\n");
-    }
-    if (IsWindowsVistaSP1OrGreater())
-    {
-        return "Windows Vista SP1";//printf("VistaSP1OrGreater\n");
-    }
-    if (IsWindowsVistaSP2OrGreater())
-    {
-        return "Windows Vista SP2";//printf("VistaSP2OrGreater\n");
-    }
-    if (IsWindows7OrGreater())
-    {
-        return "Windows 7";//printf("Windows7OrGreater\n");
-    }
-    if (IsWindows7SP1OrGreater())
-    {
-       return "Windows 7 SP1";// printf("Windows7SP1OrGreater\n");
-    }
-    if (IsWindows8OrGreater())
-    {
-        return "Windows 8";//printf("Windows8OrGreater\n");
-    }
-    if (IsWindows8Point1OrGreater())
-    {
-        return "Windows 8.1";//printf("Windows8Point1OrGreater\n");
-    }
-    if (IsWindows10OrGreater())
-    {
-        return "Windows 10";//printf("Windows10OrGreater\n");
-    }
-    if (IsWindowsServer())
-    {
-        return "Server";//printf("Server\n");
-    }
-    else
-    {
-        //printf("Unknown\n");
-		return "Unknown";
-    }
-	*/
+   
 }
 
-// Builds a HTTP POST string that is passed to the APersona server
+/**
+ * @fn	std::string buildAPersonaKey()
+ *
+ * @brief	Builds a HTTP POST string that is passed to the APersona server.
+ *
+ * @return	A std::string.
+ */
 std::string buildAPersonaKey()
 {
 	std::string _ret;
@@ -1379,14 +1535,6 @@ std::string buildAPersonaKey()
 			log_text_to_file("aPersona RDC Remote Address unable to resolve.", E_ABORT);
 		}
 	}
-	//_ret.append(",\"ipAddress\":");
-	//std::string address = get_ipaddress();
-	//_ret.append("\"" + address + "\"");
-	//PWSTR _tmp = getIADsNetAddress(u, p);
-	//_ret.append(ws2s(_tmp));
-
-	//_ret.append(",\"ipAddrPri\":");
-	//_ret.append(ipAddressPrivate);
 
 	_ret.append(",\"deviceType\":\"PC\"");
 
@@ -1399,6 +1547,22 @@ std::string buildAPersonaKey()
 
 	return _ret;
 }
+
+/**
+ * @fn	HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _otpflag, PWSTR _otpcode, std::string& pszPostData )
+ *
+ * @brief	Builds HTTP post string.
+ *
+ * @param	u				   	The PWSTR to process.
+ * @param	p				   	The PWSTR to process.
+ * @param	_key			   	The key.
+ * @param	_flag			   	The flag.
+ * @param	_otpflag		   	The otpflag.
+ * @param	_otpcode		   	The otpcode.
+ * @param [in,out]	pszPostData	Information describing the post.
+ *
+ * @return	A hResult.
+ */
 HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _otpflag, PWSTR _otpcode, std::string& pszPostData )
 {
 	std::string _DATA;
@@ -1409,9 +1573,8 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 
 	if(user == NULL)
 	{
-		//::MessageBoxA(NULL, _com_error(hr).ErrorMessage(), "APersona Active Directory Error", 0);
 		log_text_to_file("aPersona Active Directory Error, IADsUser lookup failed for user: " + ws2s(u), NULL);
-		return E_ABORT;//OutputWrite(L"User is null");
+		return E_ABORT;
 	}
 		
 	// add SAM name (login)
@@ -1429,13 +1592,12 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 	_pszEmail = ws2s(_email);
 			
 	// add Security Policy License Key 
-	_DATA.append("&l=");//PWSTR secpolkey = L"&l="; // + key
-	_DATA.append(std::string(_key));//wcscat(_d, secpolkey);
+	_DATA.append("&l=");
+	_DATA.append(std::string(_key));
 
 	//One Time passcode
 	VARIANT _phone;
 	VARIANT otpMethod;
-	//BSTR attr = SysAllocString(L"aPersonaOTP");
 	hr = user->Get(L"aPersonaOTP", &otpMethod);
 	std::string otpMethodString;
 	int domainOTPFlag = -1; // Default is Email so we start this as 0 and adjust from there if needed
@@ -1470,12 +1632,12 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 	else
 		log_text_to_file("aPersona Active Directory Error, failed to read aPersonaOTP attribute for user " + ws2s(u), NULL);
 	
-	if(domainOTPFlag > 0)
+	if(domainOTPFlag > 0) //mobile
 	{
 		char buf[33];
 		sprintf(buf, "%d", domainOTPFlag);
 		
-		if(domainOTPFlag == 1)//if(_otpflag == 1) // SMS
+		if(domainOTPFlag == 1)
 		{
 			_DATA.append("&otpm=s");
 			_DATA.append("&o=");
@@ -1500,9 +1662,8 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 			_DATA.append("&p=");
 			_DATA.append(_pszSMSPhone);
 
-			//::MessageBoxA(NULL, "Got domain flag for SMS", "blah1", 0);
 		}
-		else if(domainOTPFlag == 2)//else if(_otpflag == 2) // Voicemail
+		else if(domainOTPFlag == 2) // Voicemail
 		{
 			_DATA.append("&otpm=v");
 			_DATA.append("&o=");
@@ -1527,11 +1688,9 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 			_DATA.append("&p=");
 			_DATA.append(_pszVoicePhone);
 
-			//::MessageBoxA(NULL, "Got domain flag for Voice", "blah1", 0);
 		}
 		else // Default 
 		{
-			//::MessageBoxA(NULL, "Got domain flag for EMAIL", "blah1", 0);
 		}
 	}
 	else
@@ -1593,13 +1752,11 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 		{			
 		}
 	}
-	//_DATA.append("&p=");
-	//_DATA.append(ws2s(_phone.bstrVal));
 	
 	// Identifier
 	_DATA.append("&c=");
 	std::string I;
-	hr = GetKeyValue("one-time-trans-key", I);//GetConfigOpt("C:\\Program Files\\aPersona\\config.txt", "identifier");
+	hr = GetKeyValue("one-time-trans-key", I);
 	if(!SUCCEEDED(hr))
 	{
 		log_text_to_file("aPersona Registry Error, failed to read one time transaction key value", hr);
@@ -1615,15 +1772,29 @@ HRESULT buildHttpPostString(PWSTR u, PWSTR p, LPCSTR _key, DWORD _flag, DWORD _o
 	user->Release();
 
 	pszPostData = _DATA;
-	//::MessageBoxA(NULL, _DATA.c_str(), "test", 0);
 	return hr;
 }
-// Using WinHTTP make a connection to the ASM server and POST data
+
+/**
+ * @fn	HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int pszPort, LPSTR pszPostData, LPSTR& response)
+ *
+ * @brief	Using WinHTTP make a connection to the ASM server and POST data.
+ *
+ * @param	pszUserAgent		The user agent.
+ * @param	pszServer			The server.
+ * @param	pszPath				Full pathname of the file.
+ * @param	pszPort				The port.
+ * @param	pszPostData			Information describing the post.
+ * @param [in,out]	response	The response.
+ *
+ * @return	A hResult.
+ */
+
 HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int pszPort, LPSTR pszPostData, LPSTR& response)
 {
 	// Holds the JSON response string from the Server.  If no connection is made then some preconfigured default strings will be
 	// returned and dealt with accordingly
-	//LPSTR _response;
+
 
 	DWORD dwError = 0;
 	std::vector<std::string> _s;
@@ -1670,7 +1841,6 @@ HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int
 		return E_ABORT;
 	}
 
-//const CString cstrHeaders = _T("Cookie: JSESSIONID=") + cstrSession;
 	LPCWSTR cstrHeaders = L"Content-Type: application/x-www-form-urlencoded";
 
 	if (WinHttpAddRequestHeaders(hRequest, cstrHeaders, 47,
@@ -1690,7 +1860,6 @@ HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int
 		WinHttpCloseHandle(hConnect);
 		WinHttpCloseHandle(hRequest);
 		log_text_to_file("aPersona Error sending HTTP request to Server", NULL);
-		//delete []_parmsc;
 		return E_ABORT;
 	}
 
@@ -1718,23 +1887,22 @@ HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int
 	{
 		dwSize = 0;
 		if(!WinHttpQueryDataAvailable(hRequest, &dwSize))
-			return E_ABORT;//GetLastError();
+			return E_ABORT;
 		pszOutBuffer = new char[dwSize+1];
 		if(!pszOutBuffer)
 		{
-			return E_ABORT;//E_OUTOFMEMORY;
+			return E_ABORT;
 		}
 		ZeroMemory(pszOutBuffer, dwSize+1);
 		if(!WinHttpReadData(hRequest, (LPVOID)pszOutBuffer, dwSize, &dwDownloaded))
 		{
-			return E_ABORT;//GetLastError();
+			return E_ABORT;
 		}
 		if(!dwDownloaded)
 			break;
 		else
-			response = pszOutBuffer;//split_string(pszOutBuffer, ",");
+			response = pszOutBuffer;
 	}while(dwSize > 0);
-		//OutputWrite((PWSTR)pszOutBuffer);
 	delete [] pszOutBuffer;
 
 	WinHttpCloseHandle(hConnect);
@@ -1743,7 +1911,17 @@ HRESULT apersonaHttpPost(LPSTR pszUserAgent, LPSTR pszServer, LPSTR pszPath, int
 	return S_OK;
 }
 
-// Takes a string, like an email address, and scrambles it somewhat by replacing chars with *
+/**
+ * @fn	std::string ScrambleString(std::string s)
+ *
+ * @brief	Takes a string, like an email address, and scrambles it somewhat by replacing chars
+ * 			with *.
+ *
+ * @param	s	The std::string to process.
+ *
+ * @return	A std::string, scrambled.
+ */
+
 std::string ScrambleString(std::string s)
 {
 	std::string ret = s;
@@ -1765,7 +1943,19 @@ std::string ScrambleString(std::string s)
 	}
 	return s;
 }
-// A function handle entry point making it easier to seperate the program flow and debug
+
+/**
+ * @fn	HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
+ *
+ * @brief	A function handle entry point making it easier to seperate the program flow and debug.
+ *
+ * @param	u  	The PWSTR to process.
+ * @param	p  	The PWSTR to process.
+ * @param	OTP	The otp.
+ *
+ * @return	A hResult.
+ */
+
 HRESULT funcHandle(PWSTR u, PWSTR p, PWSTR OTP)
 {
 	HRESULT hr;

@@ -54,6 +54,7 @@ CSampleProvider::~CSampleProvider()
     DllRelease();
 }
 
+
 void CSampleProvider::_CleanupSetSerialization()
 {
     if (_pkiulSetSerialization)
@@ -72,9 +73,7 @@ void CSampleProvider::_CleanupSetSerialization()
 **/
 HRESULT CSampleProvider::Filter(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus,DWORD dwFlags,GUID* rgclsidProviders,BOOL* rgbAllow,DWORD cProviders)
 {
-    //UNUSED(dwFlags);
     UNREFERENCED_PARAMETER(dwFlags);
-    //MessageBox(NULL, "Filter!", "Trace", NULL);
     switch (cpus)
     {
         case CPUS_LOGON:
@@ -85,20 +84,16 @@ HRESULT CSampleProvider::Filter(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus,DWORD dw
 					rgbAllow[i]=true;
                 else 
 					rgbAllow[i] = false;
-				//;
-                //rgbAllow[i]=true;
             }
         return S_OK;
         case CPUS_UNLOCK_WORKSTATION:
             //Filters out the default Windows provider (only for Logon and Unlock scenarios)
             for (int i = 0; i < (int)cProviders; i++)
             {
-                if (IsEqualGUID(rgclsidProviders[i], CLSID_CSampleProvider))//CLSID_PasswordCredentialProvider))
+                if (IsEqualGUID(rgclsidProviders[i], CLSID_CSampleProvider))
 					rgbAllow[i]=true;
                 else 
 					rgbAllow[i] = false;
-				//;
-                //rgbAllow[i]=true;
             }
         return S_OK;
         case CPUS_CREDUI:
@@ -117,6 +112,7 @@ HRESULT CSampleProvider::UpdateRemoteCredential(const CREDENTIAL_PROVIDER_CREDEN
 }
 /** End of Filter additions
 **/
+
 
 // SetUsageScenario is the provider's cue that it's going to be asked for tiles
 // in a subsequent call.  
